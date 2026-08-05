@@ -1,0 +1,98 @@
+{
+ "policy": "spec2si-core",
+ "version": "1.0.0",
+ "description": "The NODE-AGNOSTIC core of the Spec-to-Silicon flow policy: the rules every process port must carry, stated as portable principles. Consumers (AIML_ASIC 65 nm, ONR_ADFT_ASIC 28 nm, XT011_ASIC) VENDOR this file verbatim and keep their own flow_policy.json beside it, which adds the local enforcement point, the local evidence, and any process-specific rules. A consumer's file must contain every core rule id and declare a status for each; conformance/test_policy_conformance.py checks that and prints the adoption gap. What is shared is the RULE SET and its principle; what stays local is wording detail, enforcement path and evidence -- because the enforcement point is genuinely different per node (Calibre vs PVS/Pegasus, PyCell vs SKILL, one substrate vs per-tub) and pretending otherwise is how a shared file becomes a lie.",
+ "contract": {
+  "vendored": "policy/flow_policy.core.json is a byte-identical copy; sync.py --check fails a commit when it drifts from upstream",
+  "consumer_file": "analog/specs/flow_policy.json (or the repo's equivalent) lists every core id with status: enforced | partial | not-implemented | waived",
+  "not_implemented_is_legal": "a young port carries the rule as not-implemented ON PURPOSE. The gap is then COUNTED rather than invisible, which is the whole point -- the same argument as an unclassified runlog attempt.",
+  "waived_requires": "a reason, in the consumer file, naming why the rule cannot apply to that process"
+ },
+ "rules": [
+  {
+   "id": "sd-sharing",
+   "principle": "Diffusion sharing is the DEFAULT placement, decided mechanically from the primitive topology, not an optimization applied by hand. Matched pairs with a shared terminal share it on cross-device bracket centers; matched pairs without one stay unmerged; single-instance finger rows merge; ratio-critical mirror banks stay unmerged. An opt-out needs a cited measurement.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "import-qualified-view",
+   "principle": "Foundry cells enter the design database as cellviews copied from the qualified base library, never file-first from a stream format. The stream path silently substitutes cell variants.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "real-slabs",
+   "principle": "Pins and rails are recorded as true metal geometry, never as polygon bounding boxes, and nothing is drawn over an imported cell's interior. A bbox of a merged polygon puts contacts on an internal net.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "lvs-hierarchical",
+   "principle": "System LVS preserves every block as a hierarchical cell with a balanced source subcircuit. Flattening to dodge a bookkeeping problem is prohibited: it masks real defects that per-cell compare would localize.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "iterate-at-failing-tool",
+   "principle": "Debug a failing gate by re-running THAT gate in its work dir, never by re-running the pipeline.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "bench-honest",
+   "principle": "Benches model the on-chip environment, including realistic source impedance where the in-system driver is high-Z. Loops get their own loop test. A metric the bench cannot see is a spec the design cannot hold.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "worst-corner-centering",
+   "principle": "Size against the worst corners with the optimizer in the loop. Nominal-corner optima leave no margin.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "provenance",
+   "principle": "Every flow report records what produced it: the process variant, the identity (path + content hash) of every rule deck and model file it used, tool versions, host and time. A verdict without its deck hash is not reproducible. One canonical implementation, attached by the report writers themselves, best-effort so it can never kill a report.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "verify-log",
+   "principle": "Every physical-verification verdict is one observation in an append-only cross-run occurrence log, partitioned by the rule-deck hash so a PDK bump partitions the data instead of poisoning it, and classified against ONE source of rule semantics. The log DECIDES NOTHING -- live signoff still signs off; it ranks what is worth automating next.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "evaluated-set",
+   "principle": "The evaluated set is part of the verdict. Every spec evaluation reports what it actually scored -- evaluated, not-evaluated, unclaimed, dropped, and a fingerprint of the spec set -- beside the pass/fail. A missing METRIC must score as a violation; a missing SPEC ITEM must be visible, or deleting a line from a spec file makes the gate pass more easily and say nothing. A spec may declare a roster of the names it asserts it contains; fingerprint NAMES only, since re-negotiating a bound is the contract working.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "spec-as-contract",
+   "principle": "The spec file is the contract: bounds re-negotiate from measured facts, in the file, versioned, with the argument recorded.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "derived-interface",
+   "principle": "A block's exported interface is DERIVED by the code that writes it, from that block's own plan -- never hand-authored or injected into the staged artifact. A staged value no script reproduces survives only until the block is re-spun. An audit reports staged-vs-derived disagreement.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "audit-enclosure",
+   "principle": "The offline pre-signoff gate checks via ENCLOSURE as well as spacing. A net-blind spacing check reads 'no metal under this cut at all' as 'nothing nearby', so a via landed past the end of its own track passes and then fails signoff plus LVS. Enclosure misses are hard errors, never advisory.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "derive-from-geometry",
+   "principle": "Routing and placement constants are derived from the geometry they bound, not frozen at the value that happened to be right. Each such constant is correct once and silently wrong after the geometry changes.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "negative-control",
+   "principle": "A gate written for a 'lost or stale artifact' class carries a NEGATIVE CONTROL: remove the thing it protects and assert the original failure returns -- a good-path assertion passes against a stale hand-edit too. AND the expectation belongs to its INPUT: pin the input by hash beside the control, or a regenerated artifact silently turns the control into an assertion about something else. Where the input cannot be asserted, return a third verdict (UNVERIFIED), never a pass and never a fail.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "runlog",
+   "principle": "The agent loop gets the instrumentation the tool loop already has: one record per attempt, keyed by cell and by tier (offline vs cluster), with the skeleton HARVESTED from the session transcript (the one stream written unconditionally) and the terminal cause DECLARED from a closed enumeration -- inferring it would be inventing data. Unclassified is counted, never hidden, and the scanned-attempt denominator ships with the numerator. Metadata only, through an allowlist.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "model-is-a-variable",
+   "principle": "The model that wrote the code is recorded like any other variable: the agent identity (model, session, harness) sits in every report's provenance stamp beside the process variant and the deck hashes. Beside that, ONE closed block is frozen as a model regression with hash-pinned inputs, a fixed task statement, a fixed feedback schema and recorded baselines, and its runner FAILS CLOSED on a drifted reset state -- two checkpoints scored against different inputs is not a comparison.",
+   "since": "1.0.0"
+  }
+ ]
+}

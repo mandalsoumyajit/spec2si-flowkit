@@ -1,0 +1,11 @@
+{
+ "note": "Local paths on this machine. Adding a fourth process node is an edit to this file plus `sync.py --to <repo>` and a flow_policy.json in the new repo.",
+ "consumers": [
+  {"name": "AIML_ASIC", "node": "TSMC 65 nm LP", "path": "C:\\dev\\AIML_ASIC",
+   "policy": "analog/specs/flow_policy.json"},
+  {"name": "ONR_ADFT_ASIC", "node": "TSMC 28 nm HPC+/ULL",
+   "path": "C:\\dev\\ONR_ADFT_ASIC", "policy": "analog/specs/flow_policy.json"},
+  {"name": "XT011_ASIC", "node": "X-Fab XT011 PDSOI",
+   "path": "C:\\dev\\XT011_ASIC", "policy": "analog/specs/flow_policy.json"}
+ ]
+}
