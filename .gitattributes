@@ -1,0 +1,20 @@
+# Line-ending policy. Same convention as the consumer repos: LF everywhere,
+# normalized in the repo and checked out as LF on every platform (this
+# overrides core.autocrlf).
+#
+# Here it is not a style preference, it is LOAD-BEARING. The whole
+# distribution model is "vendor a byte-identical copy and hash-check it".
+# If this repo checked out CRLF on Windows while AIML_ASIC (which pins LF)
+# checked out LF, every vendored copy would hash differently on a fresh
+# clone and the drift gate would report DRIFTED on files nobody touched --
+# a gate that cries wolf is a gate that gets switched off.
+#
+# Explicit allowlist rather than `* text=auto`, matching the consumer repos.
+
+*.py     text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+*.sh     text eol=lf
+*.txt    text eol=lf
+.gitattributes text eol=lf
+.gitignore     text eol=lf
