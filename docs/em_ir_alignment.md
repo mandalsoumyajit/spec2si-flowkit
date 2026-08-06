@@ -250,21 +250,31 @@ both and measure how far the fast estimate lands from signoff.
 Alignment first — the calculator is not worth building on two cards that
 disagree about what a width means.
 
-| # | step | repo | note |
-|---|---|---|---|
-| 1 | stamp the option string into every EM/resistance entry; make the layer→tier map a card artifact | ONR | the map already exists in `process.py`; move and cite it |
-| 2 | add the EM + resistance schema as `null`s that raise | XT011 | schema only; populate after SCOPE WP 0.5 decodes `1157` |
-| 3 | locate the 65 nm tech LEF / QRC tech file; write the `extract_metal_res.py` equivalent | AIML | unblocks IR on the mature node |
-| 4 | give the AIML EM API a temperature and read `temp_rating` | AIML | **moves existing widths** — needs a re-spin audit |
-| 5 | move the AIML length/width boost onto the card | AIML | rule values out of tracked source |
-| 6 | resolve drawn vs effective width against the 65 nm DRM | AIML | §3(b) |
-| 7 | resolve the via array factor direction | AIML + ONR | §3(d); one of the two is wrong |
-| 8 | source a per-cut via resistance, or label every result a lower bound | ONR first | §5 — highest value |
-| 9 | the solver, vendored; the new core policy rule | flowkit | §6 |
-| 10 | correlate against Voltus on `ctrl_top` | AIML | §7 |
+| # | step | repo | status | note |
+|---|---|---|---|---|
+| 1 | stamp the option string into every EM/resistance entry; make the layer→tier map a card artifact | ONR | **done** `0bb594d` | was a literal in `process.py` and the fourth copy of one fact; now `metal_stack.rule_family` in the tracked grid card, read by `process.py` and `extract_metal_res.py`. Derived map verified identical to the literal; `em_power.py` output unchanged |
+| 1b | record the metal option and its tier map | AIML | **done** `c002851` | the card had no `process` section at all. Flagged `PARTIAL`: composition is from the deck name + the DRM table, **not** cross-checked against a tech LEF — which is what caught ONR's one-tier error |
+| 2 | add the EM + resistance schema as `null`s that raise | XT011 | **done** `5dc8ffd` | schema only. The three points where the prior nodes disagree are written in as questions to read, not blanks to fill from a neighbour |
+| 3 | locate the 65 nm tech LEF / QRC tech file; write the `extract_metal_res.py` equivalent | AIML | open | needs the cluster; unblocks IR on the mature node |
+| 4 | give the AIML EM API a temperature and read `temp_rating` | AIML | open | **moves existing widths** — needs a re-spin audit |
+| 5 | move the AIML length/width boost onto the card | AIML | open | rule values out of tracked source |
+| 6 | resolve drawn vs effective width against the 65 nm DRM | AIML | open | §3(b) |
+| 7 | resolve the via array factor direction | AIML + ONR | open | §3(d); one of the two is wrong |
+| 8 | source a per-cut via resistance, or label every result a lower bound | ONR first | **half done** `0bb594d` | the absence is now reported in a paragraph instead of an empty table, and the stale docstring claim is corrected. Sourcing the value is still open |
+| 9 | the solver, vendored; the new core policy rule | flowkit | open | §6 |
+| 10 | correlate against Voltus on `ctrl_top` | AIML | open | §7 |
 
-Steps 1–3 are independent and can run in parallel. Step 4 is the one with
-blast radius. Step 8 gates whether step 9's output is a value or a bound.
+Steps 1–2 are done. Step 3 is the next one that needs cluster access; step 4
+is the one with blast radius. Step 8 gates whether step 9's output is a
+value or a bound.
+
+**What the alignment pass changed about the problem.** The tier map turned
+out to be duplicated four times on ONR and absent on the other two nodes,
+and the copy that disagreed is the one that had been wrong. So the ordering
+above is now load-bearing rather than tidy: **the map has to be single-source
+on a node before any EM or resistance number on that node is worth
+stamping**, because stamping a number with an option string only helps if
+one map turns that option into a tier.
 
 ## What this document does not contain
 
