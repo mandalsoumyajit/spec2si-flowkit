@@ -41,7 +41,7 @@ Three inputs. Only one of them is new code.
 | input | where it comes from | state |
 |---|---|---|
 | currents | `op1.dc` PSF (`Vdd:p`, per instance), or a transient mean | readers exist in every needed form |
-| resistance | the vendor RC file | **all three nodes have metal + per-cut via data.** AIML and ONR from their QRC `.ict`; XT011 from its tech LEF |
+| resistance | the vendor RC file | **extracted on all three nodes.** AIML + ONR from their QRC `.ict`; XT011 from its tech LEF |
 | topology | the rail plan already on disk | exists, already carries width and layer |
 
 **Currents.** `AIML_ASIC/analog/engine/wave.py` (`read_psf`, and it already
@@ -82,8 +82,8 @@ Measured 2026-08-06, not assumed.
 | via array rule | `via_array_factor` (a **credit** for ≥2 cuts) | none — `ceil(I / per_cut)` | — |
 | stack limit | `stack_imax_ma_per_stack` | none | — |
 | poly Imax | `poly_imax_ma_per_um` | none | — |
-| sheet resistance | `rc_card.metal.<layer>`, rho table over (width, spacing) | `rc.metal.<layer>`, rho over (width, **thickness**); the LEF scalar it replaces was **2× wrong on M7** | tech LEF `RPERSQ` — but **not on METCT**, the power tier |
-| per-cut resistance | `rc_card.via.<tier>`, VIA1–VIA9 + contacts | `rc.via.<n>`, VIA1–VIA8 + RV + contacts (QRC) | tech LEF `RESISTANCE` on every CUT layer |
+| sheet resistance | `rc_card.metal.<layer>`, rho table over (width, spacing) | `rc.metal.<layer>`, rho over (width, **thickness**); the LEF scalar it replaces was **2× wrong on M7** | `rc_card.metal.<layer>`, LEF `RPERSQ` + `THICKNESS`, all six layers |
+| per-cut resistance | `rc_card.via.<tier>`, VIA1–VIA9 + contacts | `rc.via.<n>`, VIA1–VIA8 + RV + contacts (QRC) | `rc_card.cut.<n>`, VIA1–VIA4 + VIACT |
 | temperature on resistance | `temp_tc1`/`temp_tc2` per layer, ref 25 °C | none recorded | — |
 | RC corner | five; `rcworst` chosen and stamped | five; `rcworst` chosen and stamped | three (QRC-Max/Min/Typ) |
 | EM reference temp | 110 °C | 110 °C | **125 °C** |
@@ -234,11 +234,17 @@ three.** Its tech LEF carries `RPERSQ` *and* a per-cut `RESISTANCE` on every
 CUT layer, and the kit ships X-FAB's own **EM-only ICT files**, per option,
 per corner, and per target **lifetime** (1000 / 10000 / 100000 h), written
 for Voltus. So on that node the Voltus path and the fast-estimator path
-share an input and neither needs a transcription step. Two caveats travel
-with it: the vendor marks the EM files *"Data has alpha status"*, and
-**`METCT` — the thick copper top metal, the tier a power grid is built on —
-has no `RESISTANCE` and no `THICKNESS` in the LEF** while every other
-routing layer has both.
+share an input and neither needs a transcription step. One caveat travels with
+it: the vendor marks the EM files *"Data has alpha status"*.
+
+**⚠️ Corrected 2026-08-06.** This paragraph previously said `METCT` — the
+thick copper top metal — had no `RESISTANCE` or `THICKNESS` in the LEF. It
+has both, as does every routing layer, and every cut layer carries a
+per-cut `RESISTANCE`. **The XT011 LEF is complete.** The false claim came
+from reading a fixed line window around the layer instead of parsing the
+block; the extractor now reads whole blocks and prints `NOT IN THE LEF` per
+layer, which is the check that settles it. *Do not conclude a field is
+absent from a window that did not reach it.*
 
 The original text of this section follows, kept because the reasoning that
 produced the wrong conclusion is worth seeing:
@@ -336,6 +342,7 @@ disagree about what a width means.
 | 1 | stamp the option string into every EM/resistance entry; make the layer→tier map a card artifact | ONR | **done** `0bb594d` | was a literal in `process.py` and the fourth copy of one fact; now `metal_stack.rule_family` in the tracked grid card, read by `process.py` and `extract_metal_res.py`. Derived map verified identical to the literal; `em_power.py` output unchanged |
 | 1b | record the metal option and its tier map | AIML | **done** `c002851` | the card had no `process` section at all. Flagged `PARTIAL`: composition is from the deck name + the DRM table, **not** cross-checked against a tech LEF — which is what caught ONR's one-tier error |
 | 2 | add the EM + resistance schema as `null`s that raise | XT011 | **done** `5dc8ffd` | schema only. The three points where the prior nodes disagree are written in as questions to read, not blanks to fill from a neighbour |
+| 2b | **extract the XT011 data** | XT011 | **done** `cc1b34c` | `extract_rc_em.py` reads the kit's techLEF + EM ICT. Six metals, five cuts, twelve EM rule sets, no missing values. `1157` decoded from two independent vendor artefacts, cross-checked on every run |
 | 3 | locate the 65 nm tech LEF / QRC tech file; write the `extract_metal_res.py` equivalent | AIML | **done** `1799f18` | there is no LEF; the QRC `.ict` is the source and a richer one. `routing.sheet_res / line_res / via_res` added. A parser bug that dropped every layer's temperature coefficients was caught by its own asymmetry and is now guarded by `audit_parse` |
 | 4 | give the AIML EM API a temperature and read `temp_rating` | AIML | open | **moves existing widths** — needs a re-spin audit |
 | 5 | move the AIML length/width boost onto the card | AIML | open | rule values out of tracked source |
@@ -345,7 +352,9 @@ disagree about what a width means.
 | 9 | the solver, vendored; the new core policy rule | flowkit, **AIML first** | open | §6. Develop against AIML, where the answer is a value rather than a bound |
 | 10 | correlate against Voltus on `ctrl_top` | AIML | open | §7 |
 
-Steps 1–2 are done. Step 3 is the next one that needs cluster access; step 4
+**All three nodes now have extracted RC data and a recorded metal stack** —
+which was the point of the alignment pass. Steps 1, 2, 2b, 3, 6 and 8 are
+done. Step 3 is the next one that needs cluster access; step 4
 is the one with blast radius. Step 8 gates whether step 9's output is a
 value or a bound.
 
