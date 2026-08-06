@@ -101,3 +101,16 @@ Only the **policy** is shared today. The PDK-free modules that implement it
 obvious next step and a larger one, because for the other two repos it means
 *porting* as well as *sharing*. The rule set going first is what makes that
 port a checklist with a number on it instead of a memory exercise.
+
+## Plans
+
+[`docs/em_ir_alignment.md`](docs/em_ir_alignment.md) — a fast IR-drop
+calculator driven by the simulated operating point, and the prerequisite it
+exposed: the EM and resistance features of the three flows are not aligned,
+and both are keyed to a **metal option** that only one repo records. Carries
+the measured feature matrix across the three cards, four divergences that are
+defects rather than gaps, and the sequencing.
+
+This is also the first candidate for sharing something *other* than policy: a
+resistive solver touches no PDK API, so it splits cleanly into a vendored
+node-agnostic half and a local half.
