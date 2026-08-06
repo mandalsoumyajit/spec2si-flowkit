@@ -36,6 +36,12 @@ FILES = [
     # topology -- stays in the consumer's own adapter. See irdrop/solver.py.
     ("irdrop/solver.py", "irdrop/solver.py"),
     ("irdrop/test_solver.py", "irdrop/test_solver.py"),
+    # The operating-point reader. Shared for the same reason as the
+    # solver: a Spectre oppoint is a SIMULATOR format, not a PDK one --
+    # `Vdd:p` means the same thing on all three nodes. How you GET the
+    # numbers stays local (PSF vs text oppoint vs transient mean).
+    ("irdrop/currents.py", "irdrop/currents.py"),
+    ("irdrop/test_currents.py", "irdrop/test_currents.py"),
 ]
 
 
