@@ -344,17 +344,23 @@ disagree about what a width means.
 | 2 | add the EM + resistance schema as `null`s that raise | XT011 | **done** `5dc8ffd` | schema only. The three points where the prior nodes disagree are written in as questions to read, not blanks to fill from a neighbour |
 | 2b | **extract the XT011 data** | XT011 | **done** `cc1b34c` | `extract_rc_em.py` reads the kit's techLEF + EM ICT. Six metals, five cuts, twelve EM rule sets, no missing values. `1157` decoded from two independent vendor artefacts, cross-checked on every run |
 | 3 | locate the 65 nm tech LEF / QRC tech file; write the `extract_metal_res.py` equivalent | AIML | **done** `1799f18` | there is no LEF; the QRC `.ict` is the source and a richer one. `routing.sheet_res / line_res / via_res` added. A parser bug that dropped every layer's temperature coefficients was caught by its own asymmetry and is now guarded by `audit_parse` |
-| 4 | give the AIML EM API a temperature and read `temp_rating` | AIML | open | **moves existing widths** — needs a re-spin audit |
-| 5 | move the AIML length/width boost onto the card | AIML | open | rule values out of tracked source |
-| 6 | resolve drawn vs effective width against the 65 nm DRM | AIML | open | §3(b) |
+| 4 | give the AIML EM API a temperature and read `temp_rating` | AIML | **done** `87be330` | the table was dead data. `temp_c` defaults to the card's own reference, so all 4122 checked cases reproduce byte-for-byte and the offline regression fingerprint is identical. At 125 °C the same rail needs **2.7×** the width and the pin case goes 5 cuts → 12 |
+| 5 | move the AIML length/width boost onto the card | AIML | **done** `87be330` | `em_card.length_boost`. A card lacking the key raises rather than falling back to the old literals. Cluster card patched to match |
+| 6 | resolve drawn vs effective width against the 65 nm DRM | AIML | **done** | settled by `layout_scale`: 28 nm has 0.9, 65 nm has none, XT011 states `drawn`. §3(b) retracted |
 | 7 | resolve the via array factor direction | AIML + ONR | open | §3(d); one of the two is wrong |
 | 8 | source a per-cut via resistance, or label every result a lower bound | **ONR only** | **half done** `0bb594d` | no longer a general gap — AIML has cut resistance from its `.ict`. For ONR the absence is now reported in a paragraph instead of an empty table. Next place to look is the **28 nm QRC tech file**, which nobody has opened; the LEF definitively does not have it |
-| 9 | the solver, vendored; the new core policy rule | flowkit, **AIML first** | open | §6. Develop against AIML, where the answer is a value rather than a bound |
+| 9 | the solver, vendored; the new core policy rule | flowkit | **done** `9c3255b` | `irdrop/solver.py`, vendored into all three and hash-gated. Ten offline checks with answers known without the solver, plus negative controls. Core policy 1.1.0 adds `supply-drop-is-computed`; all three declare it `partial`. **The per-repo adapters are the remaining work** |
 | 10 | correlate against Voltus on `ctrl_top` | AIML | open | §7 |
 
-**All three nodes now have extracted RC data and a recorded metal stack** —
-which was the point of the alignment pass. Steps 1, 2, 2b, 3, 6 and 8 are
-done. Step 3 is the next one that needs cluster access; step 4
+**The alignment pass is complete.** All three nodes have extracted RC data
+from their vendor's own files, a recorded metal stack, and the vendored
+solver. Steps 1–6, 8 and 9 are done.
+
+**Two remain, and neither is data.** Step 7 needs the 65 nm DRM, which is
+not machine-readable here. Step 10 needs a Voltus licence and a routed
+block. And step 9's second half — the per-repo adapters that turn a rail
+plan into a `Grid` — is the work that makes the solver reachable from a
+flow rather than from a script. Step 3 is the next one that needs cluster access; step 4
 is the one with blast radius. Step 8 gates whether step 9's output is a
 value or a bound.
 
