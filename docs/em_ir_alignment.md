@@ -41,7 +41,7 @@ Three inputs. Only one of them is new code.
 | input | where it comes from | state |
 |---|---|---|
 | currents | `op1.dc` PSF (`Vdd:p`, per instance), or a transient mean | readers exist in every needed form |
-| resistance | the rules card | ONR metal only; AIML none; XT011 none |
+| resistance | the rules card | **AIML metal + vias** (QRC `.ict`); ONR metal only; XT011 none |
 | topology | the rail plan already on disk | exists, already carries width and layer |
 
 **Currents.** `AIML_ASIC/analog/engine/wave.py` (`read_psf`, and it already
@@ -82,9 +82,11 @@ Measured 2026-08-06, not assumed.
 | via array rule | `via_array_factor` (a **credit** for ≥2 cuts) | none — `ceil(I / per_cut)` | — |
 | stack limit | `stack_imax_ma_per_stack` | none | — |
 | poly Imax | `poly_imax_ma_per_um` | none | — |
-| sheet resistance | **none** | `metal.<tier>.rs_ohm_per_sq`, with a `suspect` flag | — |
-| per-cut resistance | none | **none** — see §5 | — |
-| API surface | `routing.em_width / em_cuts / em_stack_ok` | `process.metal_imax_mA / width_for_current / via_imax_mA / vias_for_current / em_temp_derate / sheet_res / line_res` | — |
+| sheet resistance | `rc_card.metal.<layer>`, a 2-D rho table over (width, spacing) + thickness | `metal.<tier>.rs_ohm_per_sq`, one scalar, with a `suspect` flag | — |
+| per-cut resistance | `rc_card.via.<tier>`, VIA1–VIA9 + contacts | **none** — see §5 | — |
+| temperature on resistance | `temp_tc1`/`temp_tc2` per layer, ref 25 °C | none recorded | — |
+| RC corner | five; `rcworst` chosen and stamped | not a choice the LEF offered | — |
+| API surface | `routing.em_width / em_cuts / em_stack_ok` + `sheet_res / line_res / via_res` | `process.metal_imax_mA / width_for_current / via_imax_mA / vias_for_current / em_temp_derate / sheet_res / line_res` | — |
 
 Four of these are **defects, not gaps**:
 
@@ -124,9 +126,18 @@ resistance are both properties of the metal *option*, not of the node.**
 
 | repo | node | option string | recorded where | read from |
 |---|---|---|---|---|
-| AIML_ASIC | TSMC 65 nm LP | `1P9M 6X1Z1U` | grid card id `tsmc65_1p9m6x1z1u`; deck path `CLN65S_9M_6X1Z1U.24a` | implicit — no `process` section |
+| AIML_ASIC | TSMC 65 nm LP | `1P9M 6X1Z1U` | `metal_stack` + `process` in `tsmc65_gridcard.json` (added `c002851`) | the deck path and card id, which agree — **not** yet a PDK read |
 | ONR_ADFT_ASIC | TSMC 28 nm HPC+/ULL | `9M_5X1Y1Z1U_UT-AlRDL`, flavor `HPC_PLUS`, PDK `CRN28HPC+ULL_v1.8_2p3a_20211109` | `tech/cards/tsmc28_gridcard.json` → `process` | the `nch_mac` CDF `pdkVersion` parameter |
 | XT011_ASIC | X-FAB XT011 PDSOI | option `1157` — **adopted, not decoded**; `metal_count: null` | `tech/cards/xt011_gridcard.template.json` → `process` | reference designs |
+
+**The clearest evidence for this whole section turned up in the PDK tree
+itself.** `$TSMC_PDK` on the cluster resolves through `$OPTION`, and the
+65 nm release ships **three metal stacks side by side** as sibling
+directories — `1p6m3x1z1u`, `1p7m4x1z1u`, `1p9m6x1z1u` — each with its own
+DRC decks and its own QRC tech files. `pdk_setup.csh` picks the third, with
+the first still present as a commented-out line. So the option is not a
+label describing the node; it is a **selector**, and every EM and resistance
+number downstream of it belongs to whichever directory was chosen.
 
 Read the two TSMC options against each other:
 
@@ -186,16 +197,44 @@ ran and found nothing: the 28 nm tech LEF has no `RESISTANCE` on cut layers.
 `process.line_res`'s "metal only, so this is a **lower bound**" caveat is
 therefore correct, and the claim in `extract_metal_res.py`'s own title line
 that it extracts per-cut resistance is not currently met. **Any IR number
-this flow produces is a lower bound until a per-cut resistance is sourced
-elsewhere** — the DR document, the QRC tech file, or measurement. On a rail
-climbing M2→M9 the via stacks are often the dominant term, so this decides
-whether the tool is useful or merely directional. It is the highest-value
-open item.
+*that node* produces is a lower bound until a per-cut resistance is sourced
+elsewhere** — the DR document, the QRC tech file, or measurement.
 
-**Does the effective/drawn shrink apply to resistance too?** If the LEF's
-`RPERSQ` is per square of *drawn* width while the conducting width is
-`0.9·w`, then `line_res` — which divides by the drawn width — is optimistic
-by about 11 %. Answer it, don't assume it.
+**⚠️ CORRECTED 2026-08-06 — this is an ONR limitation, not a general one,
+and the conclusion drawn from it was wrong.** This section previously called
+sourcing a cut resistance "the highest-value open item" and put ONR first.
+Step 3 found the 65 nm answer, and it inverts that: **the AIML PDK ships no
+tech LEF at all, and its QRC `.ict` carries per-cut resistance for every via
+tier** (`VIA1`…`VIA9` plus poly and diffusion contacts) as an `area_resistance
+R A` pair. So the mature node can cost an M1→M9 rail through its via stacks
+and produce a **value**, while the 28 nm node can still only produce a
+**bound**. The solver should therefore be developed against AIML, where its
+output is checkable, and ONR's use of it must carry the bound caveat until
+its own cut resistance is sourced — plausibly from the 28 nm QRC tech file,
+which nobody has looked at, rather than from the LEF that does not have it.
+
+**The 65 nm QRC file is also richer than the 28 nm LEF in three further
+ways**, each of which turns a number that looked like a constant into one:
+
+- **resistivity is a 2-D table over (width, spacing)**, not a scalar. A thin
+  tier at minimum width is materially more resistive than the same tier at
+  1 µm. There is consequently no `sheet_res(layer)` taking a layer alone on
+  that node — asking for one is asking for whatever width the caller assumed;
+- **temperature coefficients**, referenced to the ICT's own `temp_reference`
+  of **25 °C** — which is *not* the EM card's 110 °C. Both references appear
+  in one calculation and neither may be assumed;
+- **five RC corners** where the LEF had one number, with a best-to-worst
+  spread of about **37 %** on a 300 µm trunk. `rcworst` is the IR corner.
+
+**Does the effective/drawn shrink apply to resistance too? — answered for
+65 nm, still open for 28 nm.** The ICT states `wire_top_enlargement` and
+`wire_bottom_enlargement` per layer, so the conducting width is
+`w + (top + bottom)/2` — a signed, few-nanometre, per-layer geometric bias.
+**It is not the EM card's 0.9 factor and must not be conflated with it**: one
+is a cross-section, the other a current-rule convention, and an RC file says
+nothing about EM. The 28 nm question — whether `RPERSQ` is per square of
+drawn width while the conducting width is `0.9·w`, making `line_res`
+optimistic by about 11 % — is unchanged and still open.
 
 **DC vs AC limits — the repo contradicts itself.** `tech/process.py`'s
 2026-07-31 correction states the tech LEF carries `DCCURRENTDENSITY` on all
@@ -255,13 +294,13 @@ disagree about what a width means.
 | 1 | stamp the option string into every EM/resistance entry; make the layer→tier map a card artifact | ONR | **done** `0bb594d` | was a literal in `process.py` and the fourth copy of one fact; now `metal_stack.rule_family` in the tracked grid card, read by `process.py` and `extract_metal_res.py`. Derived map verified identical to the literal; `em_power.py` output unchanged |
 | 1b | record the metal option and its tier map | AIML | **done** `c002851` | the card had no `process` section at all. Flagged `PARTIAL`: composition is from the deck name + the DRM table, **not** cross-checked against a tech LEF — which is what caught ONR's one-tier error |
 | 2 | add the EM + resistance schema as `null`s that raise | XT011 | **done** `5dc8ffd` | schema only. The three points where the prior nodes disagree are written in as questions to read, not blanks to fill from a neighbour |
-| 3 | locate the 65 nm tech LEF / QRC tech file; write the `extract_metal_res.py` equivalent | AIML | open | needs the cluster; unblocks IR on the mature node |
+| 3 | locate the 65 nm tech LEF / QRC tech file; write the `extract_metal_res.py` equivalent | AIML | **done** `1799f18` | there is no LEF; the QRC `.ict` is the source and a richer one. `routing.sheet_res / line_res / via_res` added. A parser bug that dropped every layer's temperature coefficients was caught by its own asymmetry and is now guarded by `audit_parse` |
 | 4 | give the AIML EM API a temperature and read `temp_rating` | AIML | open | **moves existing widths** — needs a re-spin audit |
 | 5 | move the AIML length/width boost onto the card | AIML | open | rule values out of tracked source |
 | 6 | resolve drawn vs effective width against the 65 nm DRM | AIML | open | §3(b) |
 | 7 | resolve the via array factor direction | AIML + ONR | open | §3(d); one of the two is wrong |
-| 8 | source a per-cut via resistance, or label every result a lower bound | ONR first | **half done** `0bb594d` | the absence is now reported in a paragraph instead of an empty table, and the stale docstring claim is corrected. Sourcing the value is still open |
-| 9 | the solver, vendored; the new core policy rule | flowkit | open | §6 |
+| 8 | source a per-cut via resistance, or label every result a lower bound | **ONR only** | **half done** `0bb594d` | no longer a general gap — AIML has cut resistance from its `.ict`. For ONR the absence is now reported in a paragraph instead of an empty table. Next place to look is the **28 nm QRC tech file**, which nobody has opened; the LEF definitively does not have it |
+| 9 | the solver, vendored; the new core policy rule | flowkit, **AIML first** | open | §6. Develop against AIML, where the answer is a value rather than a bound |
 | 10 | correlate against Voltus on `ctrl_top` | AIML | open | §7 |
 
 Steps 1–2 are done. Step 3 is the next one that needs cluster access; step 4
