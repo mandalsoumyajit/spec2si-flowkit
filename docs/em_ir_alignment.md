@@ -41,7 +41,7 @@ Three inputs. Only one of them is new code.
 | input | where it comes from | state |
 |---|---|---|
 | currents | `op1.dc` PSF (`Vdd:p`, per instance), or a transient mean | readers exist in every needed form |
-| resistance | the rules card | **AIML metal + vias** (QRC `.ict`); ONR metal only; XT011 none |
+| resistance | the vendor RC file | **all three nodes have metal + per-cut via data.** AIML and ONR from their QRC `.ict`; XT011 from its tech LEF |
 | topology | the rail plan already on disk | exists, already carries width and layer |
 
 **Currents.** `AIML_ASIC/analog/engine/wave.py` (`read_psf`, and it already
@@ -75,20 +75,23 @@ Measured 2026-08-06, not assumed.
 | capability | AIML_ASIC (65 nm) | ONR_ADFT_ASIC (28 nm) | XT011_ASIC (110 nm) |
 |---|---|---|---|
 | metal Imax | `em_card.metal_imax_ma`, keyed **by layer name** M1–M9 | `em.metal_mA`, keyed **by tier class** M1/Mx/My/Mz/Mu/Mr | — |
-| Imax formula | `k·(w − dw)`, `w` **drawn** | `k·(0.9·w − offset)`, `0.9` an effective/drawn shrink | — |
+| Imax formula | `k·(w − dw)`, `w` **drawn** (no `layout_scale`) | `k·(0.9·w − offset)` — the 0.9 is `layout_scale`, a process shrink | `k·w`, **no offset**, width-tiered; `em_output_wlt drawn` |
 | length/width boost | **hardcoded in `routing.em_width`** | `em.length_width_boost`, a card table keyed on length *and* width, per class | — |
 | temperature derate | table on the card, **never read** | `em.temp_derate`, applied in `metal_imax_mA` and `via_imax_mA` | — |
 | via per-cut Imax | `via_imax_ma_per_cut`, VIA1–8 | `em.via_mA`, CO + VIA1–8 | — |
 | via array rule | `via_array_factor` (a **credit** for ≥2 cuts) | none — `ceil(I / per_cut)` | — |
 | stack limit | `stack_imax_ma_per_stack` | none | — |
 | poly Imax | `poly_imax_ma_per_um` | none | — |
-| sheet resistance | `rc_card.metal.<layer>`, a 2-D rho table over (width, spacing) + thickness | `metal.<tier>.rs_ohm_per_sq`, one scalar, with a `suspect` flag | — |
-| per-cut resistance | `rc_card.via.<tier>`, VIA1–VIA9 + contacts | **none** — see §5 | — |
+| sheet resistance | `rc_card.metal.<layer>`, rho table over (width, spacing) | `rc.metal.<layer>`, rho over (width, **thickness**); the LEF scalar it replaces was **2× wrong on M7** | tech LEF `RPERSQ` — but **not on METCT**, the power tier |
+| per-cut resistance | `rc_card.via.<tier>`, VIA1–VIA9 + contacts | `rc.via.<n>`, VIA1–VIA8 + RV + contacts (QRC) | tech LEF `RESISTANCE` on every CUT layer |
 | temperature on resistance | `temp_tc1`/`temp_tc2` per layer, ref 25 °C | none recorded | — |
-| RC corner | five; `rcworst` chosen and stamped | not a choice the LEF offered | — |
+| RC corner | five; `rcworst` chosen and stamped | five; `rcworst` chosen and stamped | three (QRC-Max/Min/Typ) |
+| EM reference temp | 110 °C | 110 °C | **125 °C** |
+| EM lifetime | not a dimension | not a dimension | **1000 / 10000 / 100000 h** |
 | API surface | `routing.em_width / em_cuts / em_stack_ok` + `sheet_res / line_res / via_res` | `process.metal_imax_mA / width_for_current / via_imax_mA / vias_for_current / em_temp_derate / sheet_res / line_res` | — |
 
-Four of these are **defects, not gaps**:
+Of these, three are **defects** and one — (b) — turned out not to be;
+it is kept, struck through, because a retracted finding is evidence too:
 
 **(a) AIML applies no temperature derate at all.** `em_card.json` carries a
 `temp_rating` table; `grep` finds no reader for it, and `em_width`,
@@ -100,12 +103,28 @@ across its tabulated range, so this is not a rounding-order difference.
 Fixing it will move existing widths — it is the change with real blast
 radius, and it needs a re-spin audit rather than a quiet edit.
 
-**(b) The width argument means two different things.** ONR's `0.9` is not a
-fudge: `tech/probes/extract_via_em.py` recovered it independently from two
-via tiers, at four decimals, from different densities — it is how that card
-states limits, on both metal and cuts. Whether the 65 nm DRM states its
-limit against drawn or effective width is **unresolved**, and it decides
-whether every AIML EM width is optimistic by about 10 %.
+**(b) ~~The width argument means two different things.~~ RETRACTED
+2026-08-06 — this was never a defect.** The 28 nm QRC tech file declares
+`layout_scale 0.9` in one line of its process block: **that process is
+fabricated at 0.9× the drawn dimensions** (confirmed by the flow owner).
+The 65 nm ICT has no `layout_scale` at all. So `k·(0.9w − offset)` on one
+node and `k·(w − dw)` on the other are both correct, and the `0.9` that
+`extract_via_em.py` painstakingly recovered from two via tiers is a
+process-wide optical shrink, not an EM convention. XT011 states its own
+convention explicitly (`em_output_wlt drawn`).
+
+Where the shrink bites is also not where this document guessed:
+
+- **EM capacity — yes.** Capacity goes with cross-sectional area `0.9w · t`,
+  and thickness does not scale with a layout shrink.
+- **Via resistance and via current — yes, squared.** A cut's area goes as
+  `(0.9·cut)²`, i.e. 0.81.
+- **Line resistance — no.** A uniform shrink divides length and width alike,
+  so the square count `L/W` is unchanged. The claim below that ONR's
+  `line_res` is optimistic by 11 % **was wrong and is withdrawn.**
+- **The rho table lookup — yes, second order.** The table's axis is silicon,
+  so a drawn width must be scaled before lookup or it reads a slightly low
+  resistivity. Fractions of a percent, not 11 %.
 
 **(c) A boost law is living in a `.py` file.** AIML hardcodes the short-line
 enhancement inside `em_width`; ONR reads it from the card. Both repos'
@@ -200,8 +219,31 @@ that it extracts per-cut resistance is not currently met. **Any IR number
 *that node* produces is a lower bound until a per-cut resistance is sourced
 elsewhere** — the DR document, the QRC tech file, or measurement.
 
-**⚠️ CORRECTED 2026-08-06 — this is an ONR limitation, not a general one,
-and the conclusion drawn from it was wrong.** This section previously called
+**⚠️ CLOSED 2026-08-06 — and it was never a general limitation.** The
+28 nm **QRC tech file** carries `area_resistance` for `VIA1`…`VIA8`, `RV`
+and the contacts. It had simply never been opened: the flow concluded from
+the LEF's silence that the data did not exist, rather than that *that file*
+did not have it. `tech/probes/extract_qrc_rc.py` reads it, and ONR's IR
+numbers are no longer a bound. The same run settled the `suspect` flag on
+M7 — the ICT says ~0.212 Ω/sq against the LEF's 0.428, so the LEF **was**
+carrying the copied thin-tier default, wrong by exactly the 2.1× thickness
+ratio the suspicion was raised on.
+
+**And XT011 — the least mature repo — has the most complete data of the
+three.** Its tech LEF carries `RPERSQ` *and* a per-cut `RESISTANCE` on every
+CUT layer, and the kit ships X-FAB's own **EM-only ICT files**, per option,
+per corner, and per target **lifetime** (1000 / 10000 / 100000 h), written
+for Voltus. So on that node the Voltus path and the fast-estimator path
+share an input and neither needs a transcription step. Two caveats travel
+with it: the vendor marks the EM files *"Data has alpha status"*, and
+**`METCT` — the thick copper top metal, the tier a power grid is built on —
+has no `RESISTANCE` and no `THICKNESS` in the LEF** while every other
+routing layer has both.
+
+The original text of this section follows, kept because the reasoning that
+produced the wrong conclusion is worth seeing:
+
+**~~this is an ONR limitation, not a general one~~** This section previously called
 sourcing a cut resistance "the highest-value open item" and put ONR first.
 Step 3 found the 65 nm answer, and it inverts that: **the AIML PDK ships no
 tech LEF at all, and its QRC `.ict` carries per-cut resistance for every via
