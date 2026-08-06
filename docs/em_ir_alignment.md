@@ -377,14 +377,30 @@ disagree about what a width means.
 | 6 | resolve drawn vs effective width against the 65 nm DRM | AIML | **done** | settled by `layout_scale`: 28 nm has 0.9, 65 nm has none, XT011 states `drawn`. §3(b) retracted |
 | 7 | resolve the via array factor direction | AIML | **done** `7d90e01` | DRM §11.3.3.5.4 Table 11.3.5: the 2× array credit is correct as implemented. §3(d) retracted, and the whole card confirmed against the source |
 | 8 | source a per-cut via resistance, or label every result a lower bound | **ONR only** | **half done** `0bb594d` | no longer a general gap — AIML has cut resistance from its `.ict`. For ONR the absence is now reported in a paragraph instead of an empty table. Next place to look is the **28 nm QRC tech file**, which nobody has opened; the LEF definitively does not have it |
-| 9 | the solver, vendored; the new core policy rule | flowkit | **done** `9c3255b` | `irdrop/solver.py`, vendored into all three and hash-gated. Ten offline checks with answers known without the solver, plus negative controls. Core policy 1.1.0 adds `supply-drop-is-computed`; all three declare it `partial`. **The per-repo adapters are the remaining work** |
+| 9 | the solver, vendored; the new core policy rule | flowkit | **done** `9c3255b` | `irdrop/solver.py`, vendored into all three and hash-gated. Ten offline checks with answers known without the solver, plus negative controls. Core policy 1.1.0 adds `supply-drop-is-computed`; all three declare it `partial`. Adapters landed too, see 9b |
+| 9b | the per-repo adapters | ONR + AIML | **done** `a9b9ffd` `b9f176c` | ONR: `tech/irdrop.py` + `pll_3_def.ir_report`, **rail and trunk both tapped, via stacks counted** — the worst drop went 1.164 mV (metal, star) → 3.860 mV (solved, with vias). AIML: `ir_grid.py`, self-checked against a hand-computed trunk, not yet called from `assemble_top`. XT011 has no engine to adapt |
 | 10 | correlate against Voltus on `ctrl_top` | AIML | open | §7 |
 
 **The alignment pass is complete.** All three nodes have extracted RC data
 from their vendor's own files, a recorded metal stack, and the vendored
 solver. Steps 1–6, 8 and 9 are done.
 
-**One remains.** Step 10 needs a Voltus licence and a routed block. And step 9's second half — the per-repo adapters that turn a rail
+**One remains.** Step 10 needs a Voltus licence and a routed block.
+
+**What the adapters found.** On the 28 nm PLL grid the via stacks are
+roughly **half** of every drop at a block that climbs one — a four-cut
+M5→M8 stack is about 5.6 Ω against 0.6 Ω for a 300 µm M9 trunk. So
+"metal only is a lower bound" was an understatement by about a factor of
+two, not a rounding caveat. And solving rather than summing mattered
+independently: pricing a shared rail as a star from the entry, which is
+what the previous model did, understated `vco.VDD` by 2×.
+
+**The loop is not closed yet.** Both adapters take their currents from
+where the repo already keeps them — measured post-layout on ONR,
+hand-declared `NET_CURRENT_MA` on AIML. Feeding them from a simulated
+operating point, which is what §2 describes and what this whole plan was
+proposed for, is the next step and the last one that is about coupling
+rather than about data. And step 9's second half — the per-repo adapters that turn a rail
 plan into a `Grid` — is the work that makes the solver reachable from a
 flow rather than from a script. Step 3 is the next one that needs cluster access; step 4
 is the one with blast radius. Step 8 gates whether step 9's output is a
