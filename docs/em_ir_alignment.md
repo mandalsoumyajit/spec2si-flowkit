@@ -379,6 +379,7 @@ disagree about what a width means.
 | 8 | source a per-cut via resistance, or label every result a lower bound | **ONR only** | **half done** `0bb594d` | no longer a general gap — AIML has cut resistance from its `.ict`. For ONR the absence is now reported in a paragraph instead of an empty table. Next place to look is the **28 nm QRC tech file**, which nobody has opened; the LEF definitively does not have it |
 | 9 | the solver, vendored; the new core policy rule | flowkit | **done** `9c3255b` | `irdrop/solver.py`, vendored into all three and hash-gated. Ten offline checks with answers known without the solver, plus negative controls. Core policy 1.1.0 adds `supply-drop-is-computed`; all three declare it `partial`. Adapters landed too, see 9b |
 | 9b | the per-repo adapters | ONR + AIML | **done** `a9b9ffd` `b9f176c` | ONR: `tech/irdrop.py` + `pll_3_def.ir_report`, **rail and trunk both tapped, via stacks counted** — the worst drop went 1.164 mV (metal, star) → 3.860 mV (solved, with vias). AIML: `ir_grid.py`, self-checked against a hand-computed trunk, not yet called from `assemble_top`. XT011 has no engine to adapt |
+| 9c | **couple the currents to a simulated operating point** | all three | **done** `d201efc` `d024add` `fe4586d` `054e441` | `irdrop/currents.py` vendored: sign, SI prefixes, and **coverage raises rather than reading zero**. Local hooks on all three — PSF on AIML, text oppoint + the rails budget on ONR, the card on XT011 |
 | 10 | correlate against Voltus on `ctrl_top` | AIML | open | §7 |
 
 **The alignment pass is complete.** All three nodes have extracted RC data
@@ -395,12 +396,33 @@ two, not a rounding caveat. And solving rather than summing mattered
 independently: pricing a shared rail as a star from the entry, which is
 what the previous model did, understated `vco.VDD` by 2×.
 
-**The loop is not closed yet.** Both adapters take their currents from
-where the repo already keeps them — measured post-layout on ONR,
-hand-declared `NET_CURRENT_MA` on AIML. Feeding them from a simulated
-operating point, which is what §2 describes and what this whole plan was
-proposed for, is the next step and the last one that is about coupling
-rather than about data. And step 9's second half — the per-repo adapters that turn a rail
+**The loop is closed.** `irdrop/currents.py` is vendored alongside the
+solver — shared for the same reason, since a Spectre operating point is a
+*simulator* format and `Vdd:p` means the same thing on all three nodes.
+Each repo has its own hook onto it: `currents_from_psf` on AIML,
+`currents_from_oppoint` plus a `currents_from_rails` bridge on ONR, and
+the card on XT011. What stays local is only *how you get the numbers*.
+
+The three things it centralises are the three that fail by returning a
+believable number: the terminal **sign** (magnitude taken, but a
+*mixture* of signs across supplies is a bench fault and is reported), the
+SI **prefix** on a text oppoint's unit token (dropping it is twelve
+orders of magnitude and still looks like a current), and **coverage** — a
+net with no simulated current *raises* instead of reading as zero,
+because "absent" and "draws nothing" both render as 0.000 mV and only one
+is true.
+
+It also keeps the **kind** with the numbers. `avg` is what every EM card
+here asks for; `peak` is what a supply-sensitive block actually sees;
+`rms` drives self-heating and nothing states a limit for it. Two sets of
+different kinds refuse to merge.
+
+**What is still hand-declared is now visible rather than invisible.** ONR
+still reads its budget from `pll_rails.json` and AIML from
+`NET_CURRENT_MA` — but both now arrive as a `Currents` carrying a `kind`
+and a provenance string, so a report can say which it got. Pointing a
+block's bench at `currents_from_psf`/`currents_from_oppoint` is a
+one-line change at the call site rather than a new code path. And step 9's second half — the per-repo adapters that turn a rail
 plan into a `Grid` — is the work that makes the solver reachable from a
 flow rather than from a script. Step 3 is the next one that needs cluster access; step 4
 is the one with blast radius. Step 8 gates whether step 9's output is a
