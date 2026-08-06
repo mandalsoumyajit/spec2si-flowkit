@@ -30,6 +30,12 @@ FILES = [
     ("policy/flow_policy.core.json", "policy/flow_policy.core.json"),
     ("conformance/test_policy_conformance.py",
      "policy/test_policy_conformance.py"),
+    # The IR solver. The FIRST non-policy thing shared here, and it earns
+    # it by touching no PDK: ohms and amps in, volts out. Everything that
+    # knows about a process -- the RC card, the Spectre reader, the rail
+    # topology -- stays in the consumer's own adapter. See irdrop/solver.py.
+    ("irdrop/solver.py", "irdrop/solver.py"),
+    ("irdrop/test_solver.py", "irdrop/test_solver.py"),
 ]
 
 

@@ -1,6 +1,6 @@
 {
  "policy": "spec2si-core",
- "version": "1.0.0",
+ "version": "1.1.0",
  "description": "The NODE-AGNOSTIC core of the Spec-to-Silicon flow policy: the rules every process port must carry, stated as portable principles. Consumers (AIML_ASIC 65 nm, ONR_ADFT_ASIC 28 nm, XT011_ASIC) VENDOR this file verbatim and keep their own flow_policy.json beside it, which adds the local enforcement point, the local evidence, and any process-specific rules. A consumer's file must contain every core rule id and declare a status for each; conformance/test_policy_conformance.py checks that and prints the adoption gap. What is shared is the RULE SET and its principle; what stays local is wording detail, enforcement path and evidence -- because the enforcement point is genuinely different per node (Calibre vs PVS/Pegasus, PyCell vs SKILL, one substrate vs per-tub) and pretending otherwise is how a shared file becomes a lie.",
  "contract": {
   "vendored": "policy/flow_policy.core.json is a byte-identical copy; sync.py --check fails a commit when it drifts from upstream",
@@ -93,6 +93,11 @@
    "id": "model-is-a-variable",
    "principle": "The model that wrote the code is recorded like any other variable: the agent identity (model, session, harness) sits in every report's provenance stamp beside the process variant and the deck hashes. Beside that, ONE closed block is frozen as a model regression with hash-pinned inputs, a fixed task statement, a fixed feedback schema and recorded baselines, and its runner FAILS CLOSED on a drifted reset state -- two checkpoints scored against different inputs is not a comparison.",
    "since": "1.0.0"
+  },
+  {
+   "id": "supply-drop-is-computed",
+   "principle": "A supply rail is sized against BOTH rules, and both are computed from vendor data rather than assumed. Electromigration binds on the highest-current segment near the pad; IR drop binds on the longest cumulative path at the far tap, so an EM-clean grid can carry a far-end drop EM sizing is structurally incapable of seeing. The resistance comes from the foundry's own RC file, stamped with the metal option, RC corner and temperature it was read under -- a resistance without those is not reproducible, and a rail sized for current density alone has never had its voltage checked.",
+   "since": "1.1.0"
   }
  ]
 }
