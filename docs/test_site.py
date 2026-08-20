@@ -164,9 +164,16 @@ def _bare(s):
     tags put none where the source has a line break -- comparing on spaces
     reported six intact pages as truncated. Dropping whitespace entirely
     compares the only thing that is actually invariant: the characters.
+
+    ⚠ EMPHASIS MARKERS GO TOO, for the same reason. A source line ending
+    `... sizing.*` -- a stray asterisk closing emphasis opened earlier --
+    has no counterpart in the rendered text, and the mismatch reported an
+    intact page as truncated. The WORDS are the invariant; the marks are
+    not.
     """
     import re
-    return re.sub(r"\s+", "", s.replace(chr(160), ""))
+    s = s.replace(chr(160), "")
+    return re.sub(r"[\s*_`~]+", "", s)
 
 
 def main(argv):
