@@ -1,10 +1,11 @@
 {
- "note": "Local paths on this machine. Adding a fourth process node is an edit to this file plus `sync.py --to <repo>` and a flow_policy.json in the new repo.",
+ "note": "Local paths on this machine. Adding a process node is an edit to this file plus `sync.py --to <repo>` and a flow_policy.json in the new repo.",
+ "rename_in_progress": "ADR-0001 renames these repos to spec2si-<process>. This file records ACTUAL paths, never intended ones -- a registry naming where a repo is GOING to be makes the drift gate report MISSING on a repo that is fine, which is the cry-wolf failure the LF pin exists to prevent. Landed 2026-08-20: ONR_ADFT_ASIC -> spec2si-tsmc28 (with its 3 worktrees repaired). Still to move: AIML_ASIC -> spec2si-tsmc65, XT011_ASIC -> spec2si-xt011. Update the path AND the name here in the same commit as each move.",
  "consumers": [
   {"name": "AIML_ASIC", "node": "TSMC 65 nm LP", "path": "C:\\dev\\AIML_ASIC",
    "policy": "analog/specs/flow_policy.json"},
-  {"name": "ONR_ADFT_ASIC", "node": "TSMC 28 nm HPC+/ULL",
-   "path": "C:\\dev\\ONR_ADFT_ASIC", "policy": "analog/specs/flow_policy.json"},
+  {"name": "spec2si-tsmc28", "node": "TSMC 28 nm HPC+/ULL",
+   "path": "C:\\dev\\spec2si-tsmc28", "policy": "analog/specs/flow_policy.json"},
   {"name": "XT011_ASIC", "node": "X-Fab XT011 PDSOI",
    "path": "C:\\dev\\XT011_ASIC", "policy": "analog/specs/flow_policy.json"}
  ]
