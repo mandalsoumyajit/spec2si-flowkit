@@ -1,8 +1,8 @@
 {
  "note": "Local paths on this machine. Adding a process node is an edit to this file plus `sync.py --to <repo>` and a flow_policy.json in the new repo.",
- "renamed": "ADR-0001: all three process ports moved to spec2si-<process> on 2026-08-20, together with SPEC2SI_FLOWKIT -> spec2si-flowkit. These are LOCAL paths only; the GitHub repos still carry the old names, so `git remote -v` disagreeing with this file is expected until they are renamed there too. The standing rule this file learned the hard way: record where a repo IS, never where it is going -- an intended path makes --check-all report MISSING on a repo that is perfectly healthy, which is the cry-wolf failure the LF pin exists to prevent.",
+ "rename_in_progress": "ADR-0001 renames these repos to spec2si-<process>. This file records ACTUAL paths, never intended ones -- a registry naming where a repo is GOING to be makes the drift gate report MISSING on a repo that is fine, which is the cry-wolf failure the LF pin exists to prevent. Landed 2026-08-20: ONR_ADFT_ASIC -> spec2si-tsmc28 (3 worktrees repaired) and XT011_ASIC -> spec2si-xt011. Still to move: AIML_ASIC -> spec2si-tsmc65, which cannot be renamed by an agent session running inside it (Windows refuses to rename a live process's current directory). Update the path AND the name here in the same commit as that move.",
  "consumers": [
-  {"name": "spec2si-tsmc65", "node": "TSMC 65 nm LP", "path": "C:\\dev\\spec2si-tsmc65",
+  {"name": "AIML_ASIC", "node": "TSMC 65 nm LP", "path": "C:\\dev\\AIML_ASIC",
    "policy": "analog/specs/flow_policy.json"},
   {"name": "spec2si-tsmc28", "node": "TSMC 28 nm HPC+/ULL",
    "path": "C:\\dev\\spec2si-tsmc28", "policy": "analog/specs/flow_policy.json"},
