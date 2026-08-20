@@ -119,3 +119,19 @@ defects rather than gaps, and the sequencing.
 This is also the first candidate for sharing something *other* than policy: a
 resistive solver touches no PDK API, so it splits cleanly into a vendored
 node-agnostic half and a local half.
+
+## Licence
+
+**Apache-2.0** — see [LICENSE](LICENSE).
+
+This repository is the public face of the effort by design. It is small,
+stdlib-only, and touches no PDK and no vendor tool: what is here is the
+METHOD — the flow policy and its conformance test, the shared genre
+vocabulary, the documentation model and Markdown backend, and a pure
+resistive IR solver. All of it is usable on any process.
+
+The three process ports that consume it (`spec2si-tsmc65`,
+`spec2si-tsmc28`, `spec2si-xt011`) are **internal and all-rights-
+reserved**, because a port necessarily encodes foundry NDA material.
+That split is deliberate, and it is why this repository can be shared
+without a confidentiality scrub of a thousand files.
