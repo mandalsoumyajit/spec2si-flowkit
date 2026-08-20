@@ -115,7 +115,7 @@ class TexBackend(object):
     """Assemble one repo's method manual as a single .tex file."""
 
     def __init__(self, model, docsdir, areas, outdir, title, subtitle="",
-                 author="", notice="", genres=PRINT_GENRES,
+                 author="", notice="", genres=PRINT_GENRES, lead=(),
                  mainfont="DejaVu Sans", monofont="DejaVu Sans Mono"):
         self.model = model
         self.docsdir = docsdir
@@ -126,6 +126,11 @@ class TexBackend(object):
         self.author = author
         self.notice = notice
         self.genres = tuple(genres)
+        #: Repo-relative paths that LEAD Part I, in this order.
+        #: Sorting by area alone scatters the short task pages
+        #: among the long runbooks; a manual's first part should
+        #: read in the order a person meets the work.
+        self.lead = tuple(lead)
         self.mainfont = mainfont
         self.monofont = monofont
 
@@ -141,7 +146,9 @@ class TexBackend(object):
                          "title": meta.get("title")
                          or os.path.basename(self.model.rel(p))})
         order = dict((a, k) for k, (a, _d, _g) in enumerate(self.areas))
-        recs.sort(key=lambda r: (order.get(r["area"], 99), r["area"],
+        lead = dict((p, k) for k, p in enumerate(self.lead))
+        recs.sort(key=lambda r: (lead.get(r["rel"], len(lead)),
+                                 order.get(r["area"], 99), r["area"],
                                  self.genres.index(r["genre"]),
                                  r["title"].lower()))
         return recs
