@@ -1,11 +1,11 @@
 <!--docmeta
-title: spec2si-flowkit — the shared flow policy across process nodes
+title: spec2si-flowkit — the node-agnostic core of the Spec-to-Silicon flow
 genre: overview
 status: active
 area: top
 owner: soumyajit
-updated: 2026-08-05
-summary: The node-agnostic core of the Spec-to-Silicon flow policy, vendored into each process repo with a drift gate and a conformance test. What is shared, what deliberately is not, and how to add a node.
+updated: 2026-08-20
+summary: The part of the Spec-to-Silicon flow that must not diverge across process nodes — policy, genre vocabulary, documentation model and IR solver — vendored into each process port with a SHA-256 drift gate and a conformance test. What is shared, what deliberately is not, and how to add a node.
 -->
 
 <p align="center">
@@ -14,98 +14,125 @@ summary: The node-agnostic core of the Spec-to-Silicon flow policy, vendored int
 
 # spec2si-flowkit
 
-The **Spec-to-Silicon** flow now runs on three process nodes:
+**Spec-to-Silicon** is a headless, code-driven path from a machine-readable
+spec to signoff-clean silicon: sized, placed, routed, extracted, re-simulated
+and gated without a human in the loop. It runs on three process nodes, each in
+its own repository — a **process port**.
 
-| Repo | Node | State |
+This repository holds the part that must **not** diverge between them. Three
+copies of a lesson is where lessons start diverging.
+
+| Port | Node | Where it stands |
 |---|---|---|
-| `AIML_ASIC` | TSMC 65 nm LP | mature — full flow, signed-off chip |
-| `ONR_ADFT_ASIC` | TSMC 28 nm HPC+/ULL | porting — engine partially ported |
-| `XT011_ASIC` | X-Fab XT011 PDSOI | bring-up — tech layer only |
+| [`spec2si-tsmc65`](https://github.com/mandalsoumyajit/spec2si-tsmc65) | TSMC 65 nm LP | **Reference port.** Full flow; a signed-off chip and a signed-off ADC built through it |
+| [`spec2si-tsmc28`](https://github.com/mandalsoumyajit/spec2si-tsmc28) | TSMC 28 nm HPC+/ULL | Engine ported and proven — 15 cells DRC-clean and LVS-correct, a whole PLL signed off |
+| [`spec2si-xt011`](https://github.com/mandalsoumyajit/spec2si-xt011) | X-FAB XT011 PDSOI | Bring-up; first block signed off (DRC density-only, LVS MATCH) |
 
-Three copies of a lesson is where lessons start diverging. This repo holds
-the part that must **not** diverge.
+A repository is scoped to a **process**, not to a design, because that is
+where the fork-forcing divergence actually falls — Calibre vs PVS/Pegasus,
+PyCell vs SKILL PCells, one substrate node vs per-tub isolation. Designs are
+directories *inside* a port (see [ADR-0001](docs/decisions/0001-process-scoped-repos.md)).
 
-## What is shared, and what is not
+## What is shared
 
-**Shared: the rule set and its principle.** `policy/flow_policy.core.json`
-— 17 rules, each stated as a portable principle.
+Nine files, vendored byte-identically into all three ports and hash-gated —
+27 checks on every `sync.py --check-all`.
 
-**Not shared: the engine.** That is a deliberate decision, taken after
-measuring the fork rather than assuming it. AIML's engine is 94 Python
-files, ONR's 93 — **21 filenames overlap and only one (`mc.py`) is
-byte-identical.** `netlist_route.py` differs by 2,649 lines. The divergence
-is real work, not drift: Calibre vs PVS/Pegasus, PyCell vs SKILL PCells, one
-substrate node vs per-tub isolation. Forcing those into one module would
-produce a file of branches that nobody can reason about on any node.
+| What | Files | Why it is node-agnostic |
+|---|---|---|
+| **The flow policy** | `policy/flow_policy.core.json` (v1.1.0, **18 rules**) + `conformance/test_policy_conformance.py` | Each rule is stated as a portable *principle*. The enforcement point is not shared — see below |
+| **The docmeta genre vocabulary** | `policy/docmeta.core.json` (8 genres, 5 aliases) | A genre is a **staleness contract**, and a contract shared by three repos is exactly what must not diverge. All three had adopted `docmeta` independently and drifted — 26 tracked docs carried a genre the generator rejected |
+| **The documentation model** | `docs/docmodel.py` | Frontmatter, the genre vocabulary, a static-AST API extractor, doc discovery, the link and freshness checks. A docstring is a docstring on 65 nm and on 28 nm |
+| **The Markdown backend** | `docs/mdbackend.py` | Renders what the model parsed. Three repos rendering three slightly different API pages is the same divergence, one level up |
+| **The IR solver** | `irdrop/solver.py`, `irdrop/currents.py` + their tests | Ohms and amps in, volts out. A Spectre oppoint is a *simulator* format, not a PDK one |
 
-**Not shared either: enforcement paths, evidence, wording detail.** The
-enforcement point for `verify-log` is a Calibre report parser on one node and
-a Pegasus one on another. A shared file claiming otherwise would be a lie
-with a hash on it.
+Everything here is **stdlib-only and never imports the code it documents or
+analyses**. That is load-bearing: it is why the freshness gate and the
+conformance test run in CI with no PDK, no vendor licence and no dependency
+install.
+
+## What is deliberately not shared
+
+**The engine.** That decision was taken after *measuring* the fork rather than
+assuming it, and re-measuring it since. As of 2026-08-20 the 65 nm engine is 98
+Python files and the 28 nm one 133; **25 filenames overlap and exactly two are
+byte-identical** (`reporthtml.py`, `test_abstract_svg.py`), while
+`netlist_route.py` differs by 2,671 lines. The gap has widened, not closed, in
+the direction the decision predicted. The divergence is real work, not drift —
+Calibre vs Pegasus, PyCell vs SKILL, one substrate node vs per-tub isolation —
+and forcing it into one module would produce a file of branches nobody can
+reason about on any node.
+
+**Enforcement paths, evidence, wording detail.** The enforcement point for
+`verify-log` is a Calibre report parser on one node and a Pegasus one on
+another. A shared file claiming otherwise would be a lie with a hash on it.
 
 So the contract is narrow on purpose:
 
-> Every consumer carries **every** core rule id in its own policy file, with
-> a **status** — `enforced`, `partial`, `not-implemented`, or `waived` (with
-> a reason). Its own wording, its own enforcement path, its own evidence,
-> plus any process-specific rules it needs.
+> Every consumer carries **every** core rule id in its own policy file, with a
+> **status** — `enforced`, `partial`, `not-implemented`, or `waived` (with a
+> reason). Its own wording, its own enforcement path, its own evidence, plus
+> any process-specific rules it needs.
 
 ## `not-implemented` is a passing state
 
-A bring-up repo declaring most of the set `not-implemented` **passes
-conformance**. That is the design: the gap becomes a number printed on every
-run instead of an absence nobody can see.
+A bring-up port declaring most of the set `not-implemented` **passes**
+conformance. That is the design: the gap becomes a number printed on every run
+instead of an absence nobody can see.
 
 ```
-policy conformance: XT011_ASIC
-  adoption: 2/17 enforced, 0 partial, 15 not-implemented, 0 waived
+policy conformance: spec2si-tsmc65      policy conformance: spec2si-xt011
+  adoption: 12/18 enforced, 6 partial     adoption: 1/18 enforced, 6 partial,
+  docs:     176/176 tagged                          11 not-implemented
+                                          docs:     19/20 tagged (1 untagged)
 ```
 
-Which answers "are the repos consistent?" with a figure rather than an
+Which answers "are the ports consistent?" with a figure rather than an
 impression — the same argument as counting unclassified runlog attempts, and
 the opposite of a check that quietly has nothing to check.
 
+Documentation adoption is reported beside it for the same reason, and **never**
+contributes an error: a gate that fails a chip commit over a missing
+`summary:` line is a gate people route around.
+
 ## Distribution: vendored, with a drift gate
 
-Chosen over a submodule, a subtree, or a package install because it costs
-the consumers **nothing**: a clone stays a clone, the `deployment/bnl` rsync
-push is unchanged, and the cluster keeps running raw `python3` through its
-activation wrapper. The price is that real copies exist — so the copies are
-hash-checked, which is the same shape as every other derived artifact in
-these repos.
+Chosen over a submodule, a subtree or a package install because it costs the
+consumers **nothing**: a clone stays a clone, the site rsync push is
+unchanged, and the cluster keeps running raw system `python3` — no pip, at a
+3.6.8 / 3.8.10 floor the consumers' own tests enforce. Vendoring is not a
+workaround there; it is the only mechanism that works.
+
+The price is that real copies exist, so the copies are hash-checked — the same
+shape as every other derived artifact in these repos.
 
 ```bash
-python3 sync.py --to C:\dev\spec2si-xt011     # vendor / update a consumer
-python3 sync.py --check-all                # gate: has any copy drifted?
+python3 sync.py --to C:\dev\spec2si-xt011   # vendor / update one port
+python3 sync.py --check-all                 # gate: has any copy drifted?
 ```
 
-Each consumer gets `policy/flow_policy.core.json` (byte-identical) and
-`policy/test_policy_conformance.py`, and runs:
+Each port then runs its own:
 
 ```bash
 python3 policy/test_policy_conformance.py
+python3 docs/gen.py check
 ```
 
-Never hand-edit a vendored copy. Change the core here, re-vendor, and let
-each consumer decide whether its status for the changed rule still holds.
+**Never hand-edit a vendored copy.** Change the core here, re-vendor, and let
+each port decide whether its status for the changed rule still holds.
 
 ## Adding a process node
 
-1. add it to `consumers.json`;
+1. add it to `consumers.json` — recording where the repo **is**, never where
+   it is going; an intended path makes the drift gate report `MISSING` on a
+   healthy repo;
 2. `python3 sync.py --to <repo>`;
 3. write `analog/specs/flow_policy.json` in the new repo listing every core
    rule with a status — `not-implemented` for everything the port has not
    reached yet;
-4. run the conformance test and commit.
-
-## What this is not (yet)
-
-Only the **policy** is shared today. The PDK-free modules that implement it
-— `spec.py`, `provenance.py`, `runlog.py`, `regress/run.py` — still live in
-`AIML_ASIC` alone, and ONR and XT011 have none of them. Sharing those is the
-obvious next step and a larger one, because for the other two repos it means
-*porting* as well as *sharing*. The rule set going first is what makes that
-port a checklist with a number on it instead of a memory exercise.
+4. add a `docs/gen.py` holding that repo's areas and doc-exclude list; the
+   model and backend come from here;
+5. run the conformance test and the docs gate, and commit.
 
 ## Plans
 
@@ -114,11 +141,11 @@ calculator driven by the simulated operating point, and the prerequisite it
 exposed: the EM and resistance features of the three flows are not aligned,
 and both are keyed to a **metal option** that only one repo records. Carries
 the measured feature matrix across the three cards, four divergences that are
-defects rather than gaps, and the sequencing.
+defects rather than gaps, and the sequencing. The solver half of it is now
+shared; the local halves are not.
 
-This is also the first candidate for sharing something *other* than policy: a
-resistive solver touches no PDK API, so it splits cleanly into a vendored
-node-agnostic half and a local half.
+Next: the web and PDF backends hang off `docmodel.py` alongside `mdbackend.py`,
+so a manual cannot drift from the repo it documents.
 
 ## Licence
 
