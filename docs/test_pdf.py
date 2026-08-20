@@ -18,7 +18,7 @@ anything else is a regression.
 asserts that this checker reports it. Cambria has no ⛔; if the probe comes
 back clean, the detector is broken, not the manual.
 
-  python3 test_pdf.py <manual-dir>
+  python3 test_pdf.py <manual-dir> [repo-root]
   python3 test_pdf.py --self-test
 """
 import io
@@ -87,6 +87,62 @@ def self_test():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def staleness(manualdir, root):
+    """Is the built PDF actually the CURRENT manual? -> [problems].
+
+    ⛔ THE GATE THIS FILE WAS MISSING. Everything else here inspects the
+    artifact that exists -- glyphs, errors, page count -- and none of it can
+    tell you the artifact is a build of yesterday's sources. A stale PDF
+    passes every one of those checks perfectly, which is the exact shape of
+    failure this project keeps paying for: a green gate over a wrong
+    artifact.
+
+    Two independent questions, because either can be wrong alone:
+
+      1. would regenerating the .tex change it?  (sources moved on)
+      2. is the .pdf older than the .tex?        (tex rebuilt, PDF not)
+
+    The first is the same read-only drift check `docs/gen.py check` uses:
+    build with apply=False and see whether anything WOULD be written.
+    """
+    import os
+    import sys
+    out = []
+    tex = os.path.join(manualdir, "manual.tex")
+    pdf = os.path.join(manualdir, "manual.pdf")
+
+    sys.path.insert(0, os.path.join(root, "docs"))
+    for stale_mod in ("gen", "docmodel", "texbackend", "apiref"):
+        sys.modules.pop(stale_mod, None)
+    try:
+        import gen
+        gen.MODEL.reset(False)                    # read-only: writes nothing
+        gen.BOOK.build(date=_date_of(tex))
+        if gen.MODEL.dirty:
+            out.append("the .tex would change if regenerated (%s)"
+                       % ", ".join(gen.MODEL.dirty[:3]))
+    except Exception as exc:                       # a port may not build here
+        out.append("could not check .tex freshness: %s" % exc)
+
+    if os.path.exists(tex) and os.path.exists(pdf):
+        if os.path.getmtime(pdf) < os.path.getmtime(tex):
+            out.append("the .pdf is older than the .tex it was built from")
+    return out
+
+
+def _date_of(tex):
+    """The date already stamped in the .tex, so the check does not report
+    drift merely because today is a different day."""
+    import io
+    import re
+    try:
+        head = io.open(tex, encoding="utf-8").read(4000)
+    except OSError:
+        return ""
+    m = re.search(r"on (\d{4}-\d{2}-\d{2})", head)
+    return m.group(1) if m else ""
+
+
 def main(argv):
     if "--self-test" in argv:
         return self_test()
@@ -100,6 +156,7 @@ def main(argv):
     text = read_log(log)
     miss, errs = audit(text)
     npages = pages(text)
+    stale = staleness(d, argv[1] if len(argv) > 1 else os.getcwd())
 
     for ch, font in sorted(miss.items()):
         print("MISSING GLYPH  %r (U+%04X) has no glyph in %s"
@@ -113,9 +170,13 @@ def main(argv):
         print("SUSPICIOUS     only %d page(s) from %.1f MB of LaTeX"
               % (npages, os.path.getsize(tex) / 1e6
                  if os.path.exists(tex) else 0))
-    ok = not (miss or errs or small) and os.path.exists(pdf)
-    print("pdf check: %s — %d page(s), %d missing glyph(s), %d error(s)"
-          % ("PASS" if ok else "FAIL", npages, len(miss), len(errs)))
+    for s in stale:
+        print("STALE          %s" % s)
+    ok = not (miss or errs or small or stale) and os.path.exists(pdf)
+    print("pdf check: %s — %d page(s), %d missing glyph(s), %d error(s), "
+          "%d staleness problem(s)"
+          % ("PASS" if ok else "FAIL", npages, len(miss), len(errs),
+             len(stale)))
     return 0 if ok else 1
 
 
