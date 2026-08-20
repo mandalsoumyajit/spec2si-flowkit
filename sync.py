@@ -68,6 +68,17 @@ FILES = [
     # exists to stop, one level up. Each repo's docs/gen.py keeps only its
     # CONFIG (areas, globs, its own JSON cards) and drives this.
     ("docs/mdbackend.py", "docs/mdbackend.py"),
+    # The web manual: a Markdown->HTML renderer for the subset these repos
+    # actually use, and the static-site backend over it. Both stdlib-only
+    # for the same reason as everything else here -- the cluster has no pip
+    # and the CI gate must not need one. mdrender is measured against the
+    # corpus rather than guessed at, and its tests ship with it because the
+    # failure mode is a page that renders WRONG, not one that fails to
+    # build.
+    ("docs/mdrender.py", "docs/mdrender.py"),
+    ("docs/test_mdrender.py", "docs/test_mdrender.py"),
+    ("docs/htmlbackend.py", "docs/htmlbackend.py"),
+    ("docs/test_site.py", "docs/test_site.py"),
 ]
 
 
