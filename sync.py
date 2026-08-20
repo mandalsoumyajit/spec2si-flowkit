@@ -79,6 +79,15 @@ FILES = [
     ("docs/test_mdrender.py", "docs/test_mdrender.py"),
     ("docs/htmlbackend.py", "docs/htmlbackend.py"),
     ("docs/test_site.py", "docs/test_site.py"),
+    # The PDF manual: a LaTeX emitter for the SHARED parser, and the backend
+    # that assembles a curated method manual from it. XeLaTeX, because the
+    # structural markers and the units are not ASCII -- and test_pdf.py reads
+    # the build log for `Missing character`, so a glyph the font lacks FAILS
+    # instead of vanishing.
+    ("docs/texrender.py", "docs/texrender.py"),
+    ("docs/texbackend.py", "docs/texbackend.py"),
+    ("docs/test_texrender.py", "docs/test_texrender.py"),
+    ("docs/test_pdf.py", "docs/test_pdf.py"),
 ]
 
 

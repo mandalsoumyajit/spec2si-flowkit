@@ -110,11 +110,39 @@ def inline(s):
         lambda m: ('<img src="%s" alt="%s">' % (m.group(3), m.group(2)))
         if m.group(1) else
         ('<a href="%s">%s</a>' % (m.group(3), m.group(2))), s)
-    s = _BOLD.sub(lambda m: "<strong>%s</strong>" % m.group(1), s)
-    s = _ITAL.sub(lambda m: "<em>%s</em>" % m.group(1), s)
+    s = _BOLD.sub(
+        lambda m: m.group(0) if spans_markup(m.group(1))
+        else "<strong>%s</strong>" % m.group(1), s)
+    s = _ITAL.sub(
+        lambda m: m.group(0) if spans_markup(m.group(1))
+        else "<em>%s</em>" % m.group(1), s)
     for i, code in enumerate(spans):
         s = s.replace("\x00%d\x00" % i, "<code>%s</code>" % escape(code))
     return s
+
+
+def spans_markup(body):
+    """Does this candidate emphasis body cross a tag already inserted?
+
+    ⛔ EMPHASIS RUNS AFTER LINKS AND AFTER BOLD, so by the time the
+    italic rule sees the string it already contains real markup. Two stray
+    `*` characters either side of a bold span -- and these docs have plenty,
+    in `a * b` arithmetic and in `*.gds` written outside backticks -- then
+    matched ACROSS it and produced an <em> interleaved with a <strong>:
+    balanced counts, invalid structure, and an HTML parser is the only
+    thing that notices.
+
+    Tag BALANCE inside the body is the tell, and BOTH halves matter: the
+    first version tested only for a closing tag and missed the commoner
+    case, an italic that swallowed a `<strong>` OPEN and stopped before
+    its close. A link is fine -- its <a> opens and closes inside its own
+    substitution, so it balances."""
+    depth = 0
+    for close, _tag in re.findall(r"<(/?)([A-Za-z]+)", body):
+        depth += -1 if close else 1
+        if depth < 0:
+            return True                 # closed a tag it never opened
+    return depth != 0                   # or opened one it never closed
 
 
 def _cells(row):
@@ -171,6 +199,73 @@ def _lazy_ok(ln):
     return True
 
 
+class HtmlEmitter(object):
+    """The default emitter: what `render` produced before it had one.
+
+    ⭐ THE PARSER IS THE ASSET, NOT THE OUTPUT. A PDF backend that brought
+    its own Markdown parser would be a second grammar to keep in step with
+    this one, and the two would diverge the first time either learned
+    something -- the same argument that put `docmodel` in the flowkit. So the
+    block loop is written once and each target implements these few methods.
+    """
+
+    def heading(self, level, text, anchor):
+        return '<h%d id="%s">%s</h%d>' % (level, anchor,
+                                          self.inline(text), level)
+
+    def para(self, text):
+        return "<p>%s</p>" % self.inline(text)
+
+    def code(self, body, lang):
+        cls = ' class="language-%s"' % lang if lang else ""
+        return "<pre><code%s>%s</code></pre>" % (cls, escape(body))
+
+    def rule(self):
+        return "<hr>"
+
+    def table(self, head, rows, aligns):
+        def cell(tag, c, k):
+            st = ' style="text-align:%s"' % aligns[k] \
+                if k < len(aligns) and aligns[k] else ""
+            return "<%s%s>%s</%s>" % (tag, st, self.inline(c), tag)
+        out = ["<table><thead><tr>"]
+        out += [cell("th", c, k) for k, c in enumerate(head)]
+        out.append("</tr></thead><tbody>")
+        for r in rows:
+            out.append("<tr>")
+            out += [cell("td", c, k) for k, c in enumerate(r)]
+            out.append("</tr>")
+        out.append("</tbody></table>")
+        return "".join(out)
+
+    def quote(self, inner):
+        return "<blockquote>%s</blockquote>" % inner
+
+    def raw(self, line):
+        return line
+
+    def list_open(self, ordered):
+        return "<ol>" if ordered else "<ul>"
+
+    def list_close(self, ordered):
+        return "</ol>" if ordered else "</ul>"
+
+    def item_open(self, text):
+        return "<li>%s" % self.inline(text)
+
+    def item_more(self, text):
+        return " " + self.inline(text)
+
+    def item_close(self):
+        return "</li>"
+
+    def inline(self, s):
+        return inline(s)
+
+    def join(self, parts):
+        return "".join(parts)
+
+
 class _Out(object):
     def __init__(self):
         self.parts = []
@@ -180,12 +275,13 @@ class _Out(object):
         self.parts.append(s)
 
 
-def render(text, heading_shift=0):
+def render(text, heading_shift=0, emit=None):
     """Markdown -> (html, headings). `headings` is [(level, text, anchor)].
 
     `heading_shift` demotes every heading by N levels, so a document can be
     embedded under a page title without two `<h1>`s fighting.
     """
+    e = emit or HtmlEmitter()
     o = _Out()
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     i, n = 0, len(lines)
@@ -194,7 +290,7 @@ def render(text, heading_shift=0):
 
     def flush():
         if para:
-            o("<p>%s</p>" % inline(" ".join(para).strip()))
+            o(e.para(" ".join(para).strip()))
             del para[:]
 
     while i < n:
@@ -218,8 +314,7 @@ def render(text, heading_shift=0):
             while i < n and not closer.match(lines[i]):
                 body.append(lines[i]); i += 1
             i += 1
-            cls = ' class="language-%s"' % lang if lang else ""
-            o("<pre><code%s>%s</code></pre>" % (cls, escape("\n".join(body))))
+            o(e.code(chr(10).join(body), lang))
             continue
 
         if not ln.strip():                             # blank
@@ -235,33 +330,22 @@ def render(text, heading_shift=0):
                 seen[a] += 1; a = "%s-%d" % (a, seen[a])
             else:
                 seen[a] = 0
-            o('<h%d id="%s">%s</h%d>' % (lvl, a, inline(txt), lvl))
+            o(e.heading(lvl, txt, a))
             o.heads.append((lvl, strip_markup(txt), a))
             i += 1; continue
 
         if _HR.match(ln) and not _UL.match(ln):        # rule
-            flush(); o("<hr>"); i += 1; continue
+            flush(); o(e.rule()); i += 1; continue
 
         if _TROW.match(ln) and i + 1 < n and _TSEP.match(lines[i + 1]):
             flush()                                    # table
             head = _cells(ln)
             al = _aligns(lines[i + 1])
             i += 2
-            o("<table><thead><tr>")
-            for k, c in enumerate(head):
-                st = ' style="text-align:%s"' % al[k] \
-                    if k < len(al) and al[k] else ""
-                o("<th%s>%s</th>" % (st, inline(c)))
-            o("</tr></thead><tbody>")
+            rows = []
             while i < n and _TROW.match(lines[i]):
-                o("<tr>")
-                for k, c in enumerate(_cells(lines[i])):
-                    st = ' style="text-align:%s"' % al[k] \
-                        if k < len(al) and al[k] else ""
-                    o("<td%s>%s</td>" % (st, inline(c)))
-                o("</tr>")
-                i += 1
-            o("</tbody></table>")
+                rows.append(_cells(lines[i])); i += 1
+            o(e.table(head, rows, al))
             continue
 
         if _QUOTE.match(ln):                           # blockquote
@@ -272,36 +356,36 @@ def render(text, heading_shift=0):
                 mq = _QUOTE.match(lines[i])
                 body.append(mq.group(1) if mq else lines[i])
                 i += 1
-            sub, subheads = render("\n".join(body), heading_shift)
+            sub, subheads = render(chr(10).join(body), heading_shift, e)
             o.heads.extend(subheads)
-            o("<blockquote>%s</blockquote>" % sub)
+            o(e.quote(sub))
             continue
 
         if _UL.match(ln) or _OL.match(ln):             # list
             flush()
-            i = _list(lines, i, o, heading_shift)
+            i = _list(lines, i, o, heading_shift, e)
             continue
 
         mh = _HTML.match(ln)
         if mh and mh.group(2).lower() in _HTML_TAGS:   # raw HTML block
             flush()
-            o(ln)
+            o(e.raw(ln))
             i += 1; continue
 
         para.append(ln.strip())
         i += 1
 
     flush()
-    return "".join(o.parts), o.heads
+    return e.join(o.parts), o.heads
 
 
-def _list(lines, i, o, shift):
+def _list(lines, i, o, shift, e):
     """One list, including nested ones. Returns the index after it."""
     n = len(lines)
     m = _UL.match(lines[i]) or _OL.match(lines[i])
     base = len(m.group(1))
     ordered = bool(_OL.match(lines[i]))
-    o("<ol>" if ordered else "<ul>")
+    o(e.list_open(ordered))
     while i < n:
         ln = lines[i]
         if not ln.strip():                             # blank: peek ahead
@@ -316,21 +400,21 @@ def _list(lines, i, o, shift):
         mu, mo = _UL.match(ln), _OL.match(ln)
         if not (mu or mo):
             if len(ln) - len(ln.lstrip()) > base:      # lazy continuation
-                o(" " + inline(ln.strip())); i += 1; continue
+                o(e.item_more(ln.strip())); i += 1; continue
             break
         ind = len((mu or mo).group(1))
         if ind < base:
             break
         if ind > base:                                 # nested
-            i = _list(lines, i, o, shift)
+            i = _list(lines, i, o, shift, e)
             continue
-        o("<li>%s" % inline(mu.group(2) if mu else mo.group(3)))
+        o(e.item_open(mu.group(2) if mu else mo.group(3)))
         i += 1
         # a nested list belongs INSIDE this <li>
         if i < n:
             mn = _UL.match(lines[i]) or _OL.match(lines[i])
             if mn and len(mn.group(1)) > base:
-                i = _list(lines, i, o, shift)
-        o("</li>")
-    o("</ol>" if ordered else "</ul>")
+                i = _list(lines, i, o, shift, e)
+        o(e.item_close())
+    o(e.list_close(ordered))
     return i
