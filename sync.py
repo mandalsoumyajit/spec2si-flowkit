@@ -50,6 +50,24 @@ FILES = [
     # numbers stays local (PSF vs text oppoint vs transient mean).
     ("irdrop/currents.py", "irdrop/currents.py"),
     ("irdrop/test_currents.py", "irdrop/test_currents.py"),
+    # The documentation MODEL -- the node-agnostic half of what was one
+    # repo's `docs/gen.py`. A docstring is a docstring on 65 nm and on
+    # 28 nm, and `docmeta` frontmatter is already a shared contract (see
+    # docmeta.core.json above), so the parse, the link check and the
+    # freshness gate are shared and each repo keeps only a thin backend
+    # that knows its own areas. This is also what lets the web manual and
+    # the PDF hang off ONE extractor instead of three.
+    #
+    # Stdlib-only and it never IMPORTS the code it documents (static AST),
+    # which is why the gate runs in CI with no PDK, no licence and no
+    # dependency install. Keep both properties.
+    ("docs/docmodel.py", "docs/docmodel.py"),
+    # The MARKDOWN backend -- the first of the three the model was split
+    # for. Rendering is not repo-specific: three repos rendering three
+    # slightly different API pages is the same divergence docmeta.core.json
+    # exists to stop, one level up. Each repo's docs/gen.py keeps only its
+    # CONFIG (areas, globs, its own JSON cards) and drives this.
+    ("docs/mdbackend.py", "docs/mdbackend.py"),
 ]
 
 

@@ -1,5 +1,5 @@
 <!--docmeta
-title: SPEC2SI_FLOWKIT — the shared flow policy across process nodes
+title: spec2si-flowkit — the shared flow policy across process nodes
 genre: overview
 status: active
 area: top
@@ -7,7 +7,12 @@ owner: soumyajit
 updated: 2026-08-05
 summary: The node-agnostic core of the Spec-to-Silicon flow policy, vendored into each process repo with a drift gate and a conformance test. What is shared, what deliberately is not, and how to add a node.
 -->
-# SPEC2SI_FLOWKIT
+
+<p align="center">
+  <img src="docs/assets/spec2si-flowkit-logo.svg" alt="spec2si-flowkit" width="480">
+</p>
+
+# spec2si-flowkit
 
 The **Spec-to-Silicon** flow now runs on three process nodes:
 

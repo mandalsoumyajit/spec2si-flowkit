@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 64" width="420" height="64" role="img" aria-label="Spec-to-Silicon design flow - the shared method, policy and gates">
+  <defs>
+    <linearGradient id="chip" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b5bef"/>
+      <stop offset="1" stop-color="#3730a3"/>
+    </linearGradient>
+  </defs>
+  <!-- THE UMBRELLA MARK, UNCHANGED. Every process port carries this exact
+       icon; only the wordmark's second line names the node. The identity is
+       the FLOW, and the node is a property of one port of it. -->
+  <g transform="translate(6,8) scale(0.75)">
+    <g fill="none" stroke="#5b5bef" stroke-width="3" stroke-linecap="round">
+      <path d="M16,26.2 A17,17 0 0 1 48,26.2"/>
+      <path d="M48,37.8 A17,17 0 0 1 16,37.8"/>
+    </g>
+    <polygon points="44.8,26 51.2,26 48,31.6" fill="#5b5bef"/>
+    <polygon points="19.2,38 12.8,38 16,32.4" fill="#5b5bef"/>
+    <circle cx="32" cy="15" r="2.6" fill="#fbbf24"/>
+    <rect x="24.5" y="24.5" width="15" height="15" rx="3.5" fill="url(#chip)"/>
+    <circle cx="28" cy="28" r="1.6" fill="#22d3ee"/>
+  </g>
+  <!-- wordmark -->
+  <text x="64" y="34" font-family="Segoe UI, system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="1.2" fill="#6366f1">SPEC &#8594; SILICON</text>
+  <text x="65" y="50" font-family="Segoe UI, system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="10" font-weight="500" letter-spacing="0.3" fill="#94a3b8">spec2si-flowkit  ·  the shared method, policy and gates</text>
+</svg>

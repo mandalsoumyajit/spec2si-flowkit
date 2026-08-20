@@ -32,10 +32,23 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def _find(root, names):
+    """First match for any of `names`, walking `root`.
+
+    ⛔ `.claude` IS PRUNED, AND THAT IS NOT COSMETIC. A git worktree under
+    `.claude/worktrees/<branch>/` is a COMPLETE SECOND CHECKOUT of this repo
+    -- policy files and all -- and `.claude` sorts before `analog` and
+    `policy`, so an unpruned walk finds the WORKTREE's copy first and
+    silently conformance-checks a branch nobody asked about. Measured
+    2026-08-20: the report named
+    `.claude/worktrees/<branch>/policy/flow_policy.core.json` on two of
+    three repos. It had always PASSED, for the worst possible reason -- the
+    worktree happened to agree with main. The moment it did not, the gate
+    would have graded the wrong tree without saying so.
+    """
     for dirpath, dirnames, files in os.walk(root):
         dirnames[:] = [d for d in dirnames
-                       if d not in (".git", "__pycache__", "work", "results",
-                                    "node_modules", ".venv")]
+                       if d not in (".git", ".claude", "__pycache__", "work",
+                                    "results", "node_modules", ".venv")]
         for n in names:
             if n in files:
                 return os.path.join(dirpath, n)
@@ -122,11 +135,46 @@ def check(root=None, upstream=None):
         out["warnings"].append(
             "local `conforms_to` is {!r}, vendored core is {!r}".format(
                 local.get("conforms_to"), core["version"]))
+    out["docs"] = doc_coverage(root)
     extra = [r for r in local_rules if r not in {c["id"] for c in core["rules"]}]
     if extra:
         out["warnings"].append(
             "{} local-only rule(s): {}".format(len(extra), ", ".join(sorted(extra))))
     return out
+
+
+def doc_coverage(root):
+    """(tagged, untagged, by_genre) for this repo's docs, or None.
+
+    ⭐ WHY DOCUMENTATION IS IN A *POLICY* CONFORMANCE REPORT. The same
+    reason the adoption gap above is printed rather than hidden behind a
+    pass: a repo that quietly stops documenting looks identical to one that
+    has nothing left to document. Printing the number means falling behind
+    SHOWS, and the three repos stay comparable.
+
+    ⚠ It NEVER contributes an error. Documentation adoption is incremental
+    by design -- untagged docs only warn in the generator too -- and a gate
+    that fails a chip commit over a missing `summary:` line is a gate people
+    route around. Returns None (and the report simply omits the line) when
+    the repo has not adopted the shared doc model yet, which is a real and
+    allowed state, not a failure.
+    """
+    docsdir = os.path.join(root, "docs")
+    if not os.path.isdir(docsdir):
+        return None
+    saved = list(sys.path)
+    try:
+        sys.path.insert(0, docsdir)
+        for stale in ("gen", "docmodel", "mdbackend"):
+            sys.modules.pop(stale, None)
+        import gen                                        # the repo's own
+        return gen.MODEL.coverage()
+    except Exception:
+        return None                 # not adopted, or not importable: quiet
+    finally:
+        sys.path[:] = saved
+        for stale in ("gen", "docmodel", "mdbackend"):
+            sys.modules.pop(stale, None)
 
 
 def report(res):
@@ -145,6 +193,14 @@ def report(res):
                                      a.get("partial", 0),
                                      a.get("not-implemented", 0),
                                      a.get("waived", 0)))
+    d = res.get("docs")
+    if d:
+        tagged, untagged, by_genre = d
+        L.append("  docs:     {}/{} tagged ({} untagged); {}".format(
+            tagged, tagged + untagged, untagged,
+            ", ".join("{} {}".format(n, g)
+                      for g, n in sorted(by_genre.items(),
+                                         key=lambda kv: (-kv[1], kv[0])))))
     for w in res["warnings"]:
         L.append("  warn  " + w)
     for e in res["errors"]:
