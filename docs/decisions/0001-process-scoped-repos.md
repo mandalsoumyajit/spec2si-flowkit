@@ -5,7 +5,7 @@ status: accepted
 area: top
 owner: soumyajit
 updated: 2026-08-20
-summary: One repo per process node, designs as directories inside it, named spec2si-<process> in lowercase-with-hyphens. Decided on a count rather than a preference: every repo already holds two or more designs and exactly one process, and the divergence that forced the engine forks is per-process (Calibre vs Pegasus, PyCell vs SKILL), not per-design. The lowercase is deliberate and argued — two of these names become package identifiers, where PyPI normalizes to lowercase anyway, and case-only path errors work on Windows but fail on the cluster. Commits us to renaming on GitHub now and the local directories only with the env-var refactor — ~85 files hardcode ~/Documents/ms_pilot or ~/Documents/onr_t28.
+summary: One repo per process node, designs as directories inside it, named spec2si-<process> in lowercase-with-hyphens. Decided on a count rather than a preference: every repo already holds two or more designs and exactly one process, and the divergence that forced the engine forks is per-process (Calibre vs Pegasus, PyCell vs SKILL), not per-design. The lowercase is deliberate and argued — two of these names become package identifiers, where PyPI normalizes to lowercase anyway, and case-only path errors work on Windows but fail on the cluster. GitHub renames are free (redirects); local directory renames cost 22/11/6/1 tracked files and a `git worktree repair`, and are NOT blocked on the env-var refactor — that claim is retracted in place, it confused the OA/work mirror with the repo checkout.
 -->
 
 # ADR-0001 — repos are scoped to the PROCESS, and named for it
@@ -104,15 +104,44 @@ have needed two steps through a temporary name to be tracked correctly.
 - **Adding a process** is a new repo, a `consumers.json` entry, and a
   `flow_policy.json` declaring the core rules `not-implemented` — which is a
   *passing* conformance state, by design.
-- ⛔ **Rename on GitHub now; rename the local directories LATER.** GitHub
-  keeps redirects, so remotes keep working the moment the name changes. The
-  local paths are a different matter: **~85 files hardcode
-  `~/Documents/ms_pilot` or `~/Documents/onr_t28`**, the username `smandal`
-  appears 33 times, and `consumers.json`, `browse/roots.json` and the
-  cluster rsync targets all carry absolute paths. Renaming the directories
-  before the `MS_PILOT`/`ANALOG_ROOT` env-var refactor lands would break the
-  vendoring drift gate and the cluster push on the same day. Local renames
-  belong **with** that refactor, not before it.
+- **Rename on GitHub freely.** GitHub keeps redirects, so every existing
+  remote — including the `gh-mandal` SSH alias — keeps working the moment
+  the name changes. Update the remotes afterwards for tidiness, not for
+  function. The only way to lose the redirect is to later create a new repo
+  under an old name.
+
+- ⚠ **RETRACTED 2026-08-20, the same day, before either rename happened.**
+  This bullet first said local directory renames were blocked on the
+  `MS_PILOT`/`ANALOG_ROOT` env-var refactor, because "~85 files hardcode
+  `~/Documents/ms_pilot` or `~/Documents/onr_t28`". **That conflated two
+  different directories.** `~/Documents/ms_pilot` is the OA/work mirror; it
+  is not, and never contained, the repo checkout. Renaming
+  `C:\dev\AIML_ASIC` does not touch a single one of those 70 references.
+  The claim was asserted from a survey number rather than checked, which is
+  precisely what `derived-interface` exists to stop.
+
+  What a local rename actually costs, measured: **22 tracked files in
+  AIML_ASIC, 11 in ONR_ADFT_ASIC, 6 in XT011_ASIC, 1 in this repo** carry an
+  absolute `dev/<REPO>` path — of which roughly two thirds are code and the
+  rest are prose. It is a mechanical job of well under an hour, in this
+  order:
+
+  1. ⛔ **The git worktrees first — the one real hazard.** A worktree
+     records absolute paths in `.git/worktrees/<name>/gitdir` and in its own
+     `.git` file, and renaming the parent breaks both. AIML_ASIC has one and
+     ONR_ADFT_ASIC has three. `git worktree repair` fixes it (git ≥ 2.30),
+     but land or close any uncommitted work in them first: a broken worktree
+     is a bad place to discover you had some.
+  2. `consumers.json` here — three absolute paths **and** three `name`
+     fields carrying the old repo names. Then `sync.py --check-all`, which
+     reports every consumer MISSING if this is wrong, exactly as `localize`
+     already warns.
+  3. The code references, `.claude/settings.json` among them — it runs
+     `cd /mnt/c/dev/AIML_ASIC/browse && python3 runlog.py harvest`, which
+     fails quietly rather than loudly.
+  4. The prose references last. The docs gate will not catch these: it
+     link-checks repo-relative links, and an absolute path in a sentence is
+     neither.
 - **The `area` frontmatter field will need to name the design** once a repo
   visibly holds several. `ONR_ADFT_ASIC` already uses sub-paths
   (`analog/char`, `analog/pex`) where `AIML_ASIC` uses flat names. Deferred:
