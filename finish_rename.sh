@@ -49,6 +49,20 @@ if [ -n "$(git -C "$OLD" status --porcelain | grep -v 'runlog_stats.json' || tru
 fi
 echo "   clean, and $NEW is free"
 
+say "0b. who holds the directory open?"
+# ⛔ THE ONLY REASON THIS RENAME EVER FAILS. Windows refuses to move a
+# directory that is any live process's CURRENT DIRECTORY, and every layer
+# reports it uselessly: mv says "Device or resource busy", Move-Item says
+# "Access is denied", and Restart Manager says there is no holder at all.
+# Name them here, before the move, rather than making the caller guess.
+if ! powershell -NoProfile -ExecutionPolicy Bypass \
+        -File "$(cygpath -w "$FLOWKIT/holders.ps1")" "C:\\dev\\AIML_ASIC"; then
+  echo
+  echo "   Refusing to continue: the move would fail and this script would"
+  echo "   abort halfway. Close the sessions listed above and re-run."
+  exit 1
+fi
+
 say "1. rename the repo directory"
 mv "$OLD" "$NEW"
 echo "   AIML_ASIC -> spec2si-tsmc65"
