@@ -1,0 +1,70 @@
+{
+ "policy": "spec2si-docmeta-core",
+ "version": "1.0.0",
+ "description": "The NODE-AGNOSTIC vocabulary for `docmeta` frontmatter: the genres a documentation gate will accept, and the aliases it folds into them. Consumers (AIML_ASIC 65 nm, ONR_ADFT_ASIC 28 nm, XT011_ASIC) VENDOR this file verbatim beside flow_policy.core.json. It exists because all three repos adopted the docmeta convention independently and their vocabularies DRIFTED: measured 2026-08-20, 26 tracked docs carry a genre AIML_ASIC's generator rejects (finding 9, journal 6, plan 6, measurement 2, howto 1, how-to 1, recipe 1), so a shared documentation generator could not run across the three repos at all. What is shared is the GENRE SET and the staleness contract each genre implies; what stays local is which genres a repo actually uses and how its generator renders them.",
+ "contract": {
+  "vendored": "policy/docmeta.core.json is a byte-identical copy; sync.py --check fails when it drifts from upstream",
+  "authoritative": "a consumer's doc generator reads THIS file for the accepted genre set and falls back to a built-in default only when the file is absent, so a repo without the vendored core still builds standalone",
+  "genre_is_a_staleness_contract": "a genre is chosen by HOW THE CONTENT CHANGES, not by what it is about. That is the whole reason the set is small and the reason adding one needs an argument: two genres that age the same way are one genre.",
+  "aliases_are_accepted_not_blessed": "an alias is a spelling the gate accepts and folds into its canonical genre for grouping. It is not a separate contract. New docs should use the canonical id; the alias exists so that adopting this file breaks no existing doc.",
+  "adding_a_genre": "add it here with an `ages_by` and a `contract` that no existing genre already states, bump the minor version, re-vendor. A genre whose contract duplicates another belongs in `aliases`."
+ },
+ "required": ["genre", "status", "updated", "summary"],
+ "genres": [
+  {
+   "id": "overview",
+   "ages_by": "an area entry point or hub README",
+   "contract": "Short; links out and never restates detail. Goes stale when it starts carrying facts that have a home elsewhere.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "guide",
+   "ages_by": "a how-to, onboarding path or runbook",
+   "contract": "Hand-written and meant to be stable; points at generated reference rather than copying it. Ages when the procedure it describes changes.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "reference",
+   "ages_by": "facts derived from code or a machine-read spec",
+   "contract": "GENERATED -- never hand-edited. Cannot go stale by construction, because a gate regenerates it and fails on drift.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "decision",
+   "ages_by": "an architecture or design choice (an ADR)",
+   "contract": "Append-only, dated, immutable. A decision is never edited to reflect a new choice -- it is SUPERSEDED by a new one, and its own status becomes `superseded`.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "plan",
+   "ages_by": "prospective work: what is intended, and on what evidence",
+   "contract": "Must be CLOSED or SUPERSEDED, never merely abandoned -- which is exactly what separates it from a `log`. A log is allowed to be stale forever because it is a dated snapshot; a plan that is stale is a claim about the future that nobody retracted. Carries a live status (draft/active/superseded) for that reason.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "study",
+   "ages_by": "an investigation, and the evidence a rule or choice rests on",
+   "contract": "Evergreen, and bound to the thing it justifies. Ages only when its measurement is re-run and disagrees.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "finding",
+   "ages_by": "a defect or result that was discovered, and what happened to it",
+   "contract": "Distinct from `study` (which is the investigation) and from `decision` (which is a choice). A finding is CLOSED by a fix or a retraction, and its status records which -- so it carries a resolution, where a study carries a conclusion.",
+   "since": "1.0.0"
+  },
+  {
+   "id": "log",
+   "ages_by": "a dated status, session handoff or journal",
+   "contract": "A disposable snapshot, explicitly ALLOWED to be stale. Nothing should ever be derived from a log; if something must stay true, it belongs in another genre.",
+   "since": "1.0.0"
+  }
+ ],
+ "aliases": {
+  "howto": "guide",
+  "how-to": "guide",
+  "recipe": "guide",
+  "journal": "log",
+  "measurement": "study"
+ }
+}

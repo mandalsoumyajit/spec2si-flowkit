@@ -30,6 +30,14 @@ FILES = [
     ("policy/flow_policy.core.json", "policy/flow_policy.core.json"),
     ("conformance/test_policy_conformance.py",
      "policy/test_policy_conformance.py"),
+    # The docmeta genre vocabulary. Shared for the same reason as the policy
+    # core and found the same way: all three repos adopted the `docmeta`
+    # frontmatter convention independently, and by 2026-08-20 twenty-six
+    # tracked docs carried a genre AIML_ASIC's generator rejects -- so a
+    # documentation generator could not be shared across the three repos at
+    # all, whatever else was in it. A genre is a STALENESS CONTRACT, and a
+    # contract is exactly the kind of thing that must not diverge.
+    ("policy/docmeta.core.json", "policy/docmeta.core.json"),
     # The IR solver. The FIRST non-policy thing shared here, and it earns
     # it by touching no PDK: ohms and amps in, volts out. Everything that
     # knows about a process -- the RC card, the Spectre reader, the rail
