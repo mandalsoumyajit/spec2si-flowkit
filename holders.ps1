@@ -13,7 +13,7 @@
 # than reported wrongly -- so an empty result means "none that this account can
 # see", never "none".
 #
-#   powershell -File holders.ps1 C:\dev\AIML_ASIC
+#   powershell -File holders.ps1 C:\dev\spec2si-tsmc65
 param([Parameter(Mandatory = $true)][string]$Path)
 
 $src = @'
