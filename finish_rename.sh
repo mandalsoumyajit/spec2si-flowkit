@@ -9,10 +9,29 @@
 #    PowerShell `Move-Item -Force` AND a WSL `mv` through /mnt/c were all
 #    refused while a session was rooted inside.
 #
-#    Run from git-bash:   bash /c/dev/spec2si-flowkit/finish_rename.sh
+# ⚠ MUST RUN UNDER GIT-BASH, NOT WSL. From a PowerShell prompt, plain `bash`
+#   resolves to WSL, which mounts the drive at /mnt/c and has a Linux python
+#   that cannot open `C:\dev\...` -- so the embedded python steps would fail
+#   halfway through, after the directory had already moved. Invoke it as:
+#
+#     & "C:\Program Files\Git\bin\bash.exe" /c/dev/spec2si-flowkit/finish_rename.sh
 #
 # Delete this script once it has run; it is a one-shot, not a tool.
 set -euo pipefail
+
+# Fail loudly on the wrong shell rather than plausibly at step 4.
+if [ ! -d /c/dev ] && [ -d /mnt/c/dev ]; then
+  echo "⛔ This is WSL. The script needs git-bash (it uses /c/... paths and the"
+  echo "   Windows python). Re-run from PowerShell as:"
+  echo '   & "C:\Program Files\Git\bin\bash.exe" /c/dev/spec2si-flowkit/finish_rename.sh'
+  exit 1
+fi
+[ -d /c/dev ] || { echo "⛔ /c/dev not found -- is this git-bash?"; exit 1; }
+python -c "import sys; sys.exit(0 if sys.platform=='win32' else 1)" 2>/dev/null || {
+  echo "⛔ \`python\` here is not the Windows interpreter; the path rewrite in"
+  echo "   step 4 opens C:\\dev\\... and would fail after the move. Use git-bash."
+  exit 1
+}
 
 OLD=/c/dev/AIML_ASIC
 NEW=/c/dev/spec2si-tsmc65
