@@ -120,6 +120,13 @@ def content_survives(site, model, sample=40):
     survives rendering, and reported 21 pages truncated that were entirely
     intact. A gate that cries wolf gets muted, so it compares plain words to
     plain words.
+
+    ⚠ The SAME bug, a second time: a heading is a candidate line too (a
+    `## 6. Landmines` section whose body is a table is otherwise the last
+    thing standing, since table rows are excluded from candidacy below), and
+    `#+` marker survives into the probe exactly like the list marker used
+    to -- the render correctly drops it for an <h2>, the probe didn't, and
+    an intact page reported truncated again.
     """
     import re
     import mdrender
@@ -138,7 +145,7 @@ def content_survives(site, model, sample=40):
         text = _bare("".join(b.text))
         cand = []
         for ln in body.split(chr(10)):
-            s = re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", ln.strip())
+            s = re.sub(r"^\s*(?:[-*+]|\d+[.)]|#+)\s+", "", ln.strip())
             s = _words(mdrender.strip_markup(s))
             if len(s.split()) >= 7 and not s.startswith(("|", ">")):
                 cand.append(s)
