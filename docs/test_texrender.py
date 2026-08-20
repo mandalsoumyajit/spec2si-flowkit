@@ -106,6 +106,26 @@ def a_fence_becomes_verbatim_and_wraps():
     assert max(len(l) for l in out.split(NL)) < 120, "verbatim did not wrap"
 
 
+def marks_inside_a_fence_become_ascii():
+    """⛔ VERBATIM IS LITERAL, SO A MACRO CANNOT RENDER THERE. Fenced code
+    bypasses esc() by design, so a ✅ or a ≫ inside a fence reached the font
+    raw and XeLaTeX dropped it silently. The log gate caught it in another
+    port after this emitter had already been called finished here."""
+    out = R("```" + NL + "✅ done  ≫ 3  ⛔ stop" + NL + "```" + NL)
+    for glyph in ("✅", "≫", "⛔"):
+        assert glyph not in out, (glyph, out)
+    assert "[OK]" in out and ">>" in out and "[STOP]" in out, out
+
+
+def a_fallback_emits_one_backslash_not_two():
+    """`\\parallel` is a LaTeX line break followed by the word; the
+    generator that wrote this table over-escaped it and XeLaTeX answered
+    with \"Missing $ inserted\"."""
+    out = texrender.esc("a ∥ b")
+    assert BS + "ensuremath{" + BS + "parallel}" in out, out
+    assert BS + BS not in out, out
+
+
 def a_table_renders_as_longtable():
     out = R("| a | b |" + NL + "|---|---|" + NL + "| 1 | 2 |" + NL)
     assert BS + "begin{longtable}" in out and BS + "end{longtable}" in out

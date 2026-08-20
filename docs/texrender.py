@@ -46,6 +46,7 @@ _MARKS = {"⛔": r"\stopmark{}", "⚠": r"\warnmark{}",
           "⭐": r"\starmark{}",
           "✅": r"\okmark{}", "❌": r"\failmark{}",
           "⏸": r"\pausemark{}", "⏭": r"\nextmark{}",
+          "🟡": r"\warnmark{}",
           "📊": r"\chartmark{}",
           "️": "", "\ufe0f": ""}
 
@@ -59,11 +60,26 @@ _CODE_WRAP = 88          # hard wrap for verbatim, so no package is needed
 #: caught this only because it reads the log. These map to math-mode or
 #: base-LaTeX constructs, which do not depend on either face.
 _FALLBACKS = {
-    "∥": r"\ensuremath{\\parallel}",
-    "≪": r"\ensuremath{\\ll}",
-    "≫": r"\ensuremath{\\gg}",
-    "①": r"\textcircled{\\scriptsize 1}",
-    "②": r"\textcircled{\\scriptsize 2}",
+    "∥": r"\ensuremath{\parallel}",
+    "≪": r"\ensuremath{\ll}",
+    "≫": r"\ensuremath{\gg}",
+    "①": r"\textcircled{\scriptsize 1}",
+    "②": r"\textcircled{\scriptsize 2}",
+}
+
+
+#: ⛔ VERBATIM IS LITERAL, SO A MACRO CANNOT RENDER THERE. Fenced code
+#: bypasses `esc` entirely -- that is the point of verbatim -- so a ✅ or a
+#: ≫ inside a fenced block reached the font raw and was DROPPED silently,
+#: which the log gate caught in another port after this file had already
+#: been 'finished' here. Inside code these become ASCII, which is what a
+#: terminal would have shown anyway.
+_VERBATIM_SUBS = {
+    "⛔": "[STOP]", "⚠": "[!]", "⭐": "[*]", "✅": "[OK]",
+    "❌": "[FAIL]", "⏸": "[PAUSED]", "⏭": "[NEXT]",
+    "📊": "[chart]", "🟡": "[!]",
+    "∥": "||", "≪": "<<", "≫": ">>", "①": "(1)", "②": "(2)",
+    "️": "",
 }
 
 
@@ -131,6 +147,8 @@ class LatexEmitter(mdrender.HtmlEmitter):
     def code(self, body, lang):
         lines = []
         for ln in body.split(chr(10)):
+            for a, b in _VERBATIM_SUBS.items():
+                ln = ln.replace(a, b)
             lines.extend(_wrap(ln.replace(chr(9), "    ")))
         # `verbatim` ends at the first \end{verbatim}; nothing else can
         # close it, so the only unsafe content is that literal string.
