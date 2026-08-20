@@ -70,7 +70,7 @@ hash-checked, which is the same shape as every other derived artifact in
 these repos.
 
 ```bash
-python3 sync.py --to C:\dev\XT011_ASIC     # vendor / update a consumer
+python3 sync.py --to C:\dev\spec2si-xt011     # vendor / update a consumer
 python3 sync.py --check-all                # gate: has any copy drifted?
 ```
 

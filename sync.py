@@ -8,8 +8,8 @@ is that real copies exist -- so the copies are hash-checked, which is the
 same shape as every other derived artifact here (a staged value no script
 reproduces survives only until it is re-spun).
 
-  python3 sync.py --to C:\\dev\\XT011_ASIC        # vendor / update
-  python3 sync.py --check C:\\dev\\XT011_ASIC     # gate: has the copy drifted?
+  python3 sync.py --to C:\\dev\\spec2si-xt011        # vendor / update
+  python3 sync.py --check C:\\dev\\spec2si-xt011     # gate: has the copy drifted?
   python3 sync.py --check-all                    # every registered consumer
 
 Consumers are listed in consumers.json (paths are local to this machine and
