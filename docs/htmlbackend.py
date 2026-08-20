@@ -26,6 +26,7 @@ limit, and the narrative in these docstrings is most of their value.
 import os
 import re
 
+import apiref
 import docmodel
 import mdrender
 
@@ -170,6 +171,77 @@ class HtmlBackend(object):
 
     # -- build ---------------------------------------------------------
 
+
+    # -- the lookup layer ----------------------------------------------
+
+    def _commands_page(self, recs):
+        """Every runnable entry point, with its usage.
+
+        ⭐ The web manual had an API reference and no COMMAND list, which is
+        the wrong half for most readers: this flow is a toolbox of scripts
+        you invoke, and the first question is "what can I run", not "what
+        does this function return".
+        """
+        cmds = apiref.commands(self.model, self.areas)
+        documented, total = apiref.coverage(cmds)
+        out = os.path.join(self.outdir, "commands.html")
+        B = ["<h1>Commands</h1>",
+             '<div class="meta">%d runnable entry point(s) &middot; '
+             '<b>%d</b> document their usage, <b>%d</b> do not</div>'
+             % (total, documented, total - documented)]
+        area = None
+        for c in cmds:
+            if c["area"] != area:
+                area = c["area"]
+                B.append("<h2>%s</h2>" % mdrender.escape(area))
+            B.append("<h3><code>%s</code></h3>" % mdrender.escape(c["module"]))
+            if c["summary"]:
+                B.append("<p>%s</p>" % mdrender.escape(c["summary"]))
+            if c["usage"]:
+                B.append("<pre><code>%s</code></pre>"
+                         % mdrender.escape(c["usage"]))
+            else:
+                B.append('<p class="meta">No usage line in the module '
+                         'docstring.</p>')
+        self._page(out, "Commands", "".join(B), self._nav(out, recs))
+        return out, total, documented
+
+    def _index_page(self, recs):
+        """Alphabetical symbol index -- what makes it a reference."""
+        syms = apiref.symbols(self.model, self.areas)
+        idx = apiref.index(syms)
+        out = os.path.join(self.outdir, "symbols.html")
+        B = ["<h1>Index of symbols</h1>",
+             '<div class="meta">%d distinct public name(s) across %d '
+             'symbol(s). A name defined in more than one module lists each.'
+             '</div>' % (len(idx), len(syms))]
+        letter = None
+        for name, places in idx:
+            first = name[0].upper() if name else "?"
+            if first != letter:
+                letter = first
+                B.append("<h2>%s</h2>" % mdrender.escape(letter))
+            where = ", ".join(
+                '<a href="%s#%s"><code>%s</code></a>'
+                % (_rel(out, os.path.join(self.outdir, "api",
+                                          self._area_of(mod) + ".html")),
+                   mdrender.slug(mod), mdrender.escape(mod))
+                for mod, _k, _p in places[:6])
+            B.append("<p><code>%s</code> &mdash; %s</p>"
+                     % (mdrender.escape(name), where))
+        self._page(out, "Index of symbols", "".join(B), self._nav(out, recs))
+        return out, len(idx)
+
+    def _area_of(self, module):
+        """Which area page a module's API lives on."""
+        if not getattr(self, "_area_cache", None):
+            self._area_cache = {}
+            for area, _d, globs in self.areas:
+                for p in self.model.iter_py(globs):
+                    self._area_cache[self.model.rel(p)] = area
+        return self._area_cache.get(module, self.areas[0][0] if self.areas
+                                    else "api")
+
     def _doc_pages(self):
         """One record per hand-authored doc."""
         recs = []
@@ -247,6 +319,8 @@ class HtmlBackend(object):
                        self._nav(r["out"], recs), self._toc(heads))
 
         api = self._api_pages(recs, linkmap)
+        self._commands_page(recs)
+        self._index_page(recs)
         self._index(recs, api)
         return len(recs), len(api)
 
@@ -307,7 +381,10 @@ class HtmlBackend(object):
         B = ["<h1>%s</h1>" % mdrender.escape(self.title)]
         if self.subtitle:
             B.append("<p>%s</p>" % mdrender.escape(self.subtitle))
-        B.append("<h2>API reference</h2><p>")
+        B.append('<h2>Reference</h2><p>'
+                 '<a href="commands.html"><b>Commands</b></a> &middot; '
+                 '<a href="symbols.html"><b>Index of symbols</b></a></p>')
+        B.append("<h3>API by area</h3><p>")
         B.append(" &middot; ".join(
             '<a href="%s">%s</a>' % (_rel(out, p), mdrender.escape(a))
             for a, p in api))

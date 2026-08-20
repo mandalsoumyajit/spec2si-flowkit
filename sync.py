@@ -84,6 +84,10 @@ FILES = [
     # structural markers and the units are not ASCII -- and test_pdf.py reads
     # the build log for `Missing character`, so a glyph the font lacks FAILS
     # instead of vanishing.
+    # The reference MODEL: commands, symbols, and the index that makes the
+    # manual something you look things UP in. See its docstring for why the
+    # first PDF was a transcript.
+    ("docs/apiref.py", "docs/apiref.py"),
     ("docs/texrender.py", "docs/texrender.py"),
     ("docs/texbackend.py", "docs/texbackend.py"),
     ("docs/test_texrender.py", "docs/test_texrender.py"),
