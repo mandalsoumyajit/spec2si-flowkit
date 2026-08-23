@@ -1,6 +1,6 @@
 {
  "policy": "spec2si-core",
- "version": "1.1.0",
+ "version": "1.2.0",
  "description": "The NODE-AGNOSTIC core of the Spec-to-Silicon flow policy: the rules every process port must carry, stated as portable principles. Consumers (AIML_ASIC 65 nm, ONR_ADFT_ASIC 28 nm, XT011_ASIC) VENDOR this file verbatim and keep their own flow_policy.json beside it, which adds the local enforcement point, the local evidence, and any process-specific rules. A consumer's file must contain every core rule id and declare a status for each; conformance/test_policy_conformance.py checks that and prints the adoption gap. What is shared is the RULE SET and its principle; what stays local is wording detail, enforcement path and evidence -- because the enforcement point is genuinely different per node (Calibre vs PVS/Pegasus, PyCell vs SKILL, one substrate vs per-tub) and pretending otherwise is how a shared file becomes a lie.",
  "contract": {
   "vendored": "policy/flow_policy.core.json is a byte-identical copy; sync.py --check fails a commit when it drifts from upstream",
@@ -98,6 +98,11 @@
    "id": "supply-drop-is-computed",
    "principle": "A supply rail is sized against BOTH rules, and both are computed from vendor data rather than assumed. Electromigration binds on the highest-current segment near the pad; IR drop binds on the longest cumulative path at the far tap, so an EM-clean grid can carry a far-end drop EM sizing is structurally incapable of seeing. The resistance comes from the foundry's own RC file, stamped with the metal option, RC corner and temperature it was read under -- a resistance without those is not reproducible, and a rail sized for current density alone has never had its voltage checked.",
    "since": "1.1.0"
+  },
+  {
+   "id": "one-name-one-module",
+   "principle": "A bare-name import resolves to exactly one file. A flow that puts many code directories on the import path -- so cells can refer to each other by bare name -- decides a duplicated basename by PATH ORDER, and says nothing when it does: the loser surfaces later as a missing attribute, never as a missing module, so the traceback names a file that is not the one being read. Two hazards, and they need separate gates. Ours-vs-ours: prove a module resolved to the path the flow's own resolver names for that cell. Ours-vs-STDLIB: refuse it when the path is BUILT, because a stdlib name is resolved for the whole process, including code that never opted into this flow -- unless the shadow is declared, in the code, with the reason it is load-bearing. When a name does collide, the fix follows the artifacts, not the convenience: two genuinely different things get distinct names, one thing duplicated is a DELETE, and a name that also identifies a published layout artifact is not free to rename -- check what is published, and what other repositories resolve by that path, first.",
+   "since": "1.2.0"
   }
  ]
 }

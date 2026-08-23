@@ -56,9 +56,19 @@ def _find(root, names):
 
 
 def repo_root(start=None):
+    """The checkout this file sits in.
+
+    `.git` is EXISTS, not ISDIR: in a git worktree (and a submodule) it is a
+    FILE holding a gitdir pointer, so an isdir test walks straight past the
+    worktree and returns the main checkout -- the gate then grades a tree
+    nobody is editing and PASSES, which is the same wrong-tree failure the
+    `.claude` exclusion in `_find` was added for. Measured in spec2si-tsmc65
+    2026-08-23: from .claude/worktrees/<name>/policy this returned the main
+    checkout and reported ITS policy version against the worktree's change.
+    """
     p = start or HERE
     while p != os.path.dirname(p):
-        if os.path.isdir(os.path.join(p, ".git")):
+        if os.path.exists(os.path.join(p, ".git")):
             return p
         p = os.path.dirname(p)
     return start or HERE
