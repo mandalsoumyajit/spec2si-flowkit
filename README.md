@@ -16,8 +16,8 @@ summary: The part of the Spec-to-Silicon flow that must not diverge across proce
 
 **Spec-to-Silicon** is a headless, code-driven path from a machine-readable
 spec to signoff-clean silicon: sized, placed, routed, extracted, re-simulated
-and gated without a human in the loop. It runs on three process nodes, each in
-its own repository — a **process port**.
+and gated without a human in the loop. It has three proven process ports and a
+fourth, SKY130, in bring-up; each lives in its own repository.
 
 This repository holds the part that must **not** diverge between them. Three
 copies of a lesson is where lessons start diverging.
@@ -27,6 +27,7 @@ copies of a lesson is where lessons start diverging.
 | [`spec2si-tsmc65`](https://github.com/mandalsoumyajit/spec2si-tsmc65) | TSMC 65 nm LP | **Reference port.** Full flow; a signed-off chip and a signed-off ADC built through it |
 | [`spec2si-tsmc28`](https://github.com/mandalsoumyajit/spec2si-tsmc28) | TSMC 28 nm HPC+/ULL | Engine ported and proven — 15 cells DRC-clean and LVS-correct, a whole PLL signed off |
 | [`spec2si-xt011`](https://github.com/mandalsoumyajit/spec2si-xt011) | X-FAB XT011 PDSOI | Bring-up; first block signed off (DRC density-only, LVS MATCH) |
+| [`spec2si-sky130`](https://github.com/mandalsoumyajit/spec2si-sky130) | SkyWater SKY130 | Bring-up; Cadence PDK pinned and deployment infrastructure under construction |
 
 A repository is scoped to a **process**, not to a design, because that is
 where the fork-forcing divergence actually falls — Calibre vs PVS/Pegasus,
@@ -35,8 +36,8 @@ directories *inside* a port (see [ADR-0001](docs/decisions/0001-process-scoped-r
 
 ## What is shared
 
-Nine files, vendored byte-identically into all three ports and hash-gated —
-27 checks on every `sync.py --check-all`.
+Eighteen files, vendored byte-identically into all four ports and hash-gated —
+72 checks on every `sync.py --check-all`.
 
 | What | Files | Why it is node-agnostic |
 |---|---|---|
@@ -157,8 +158,8 @@ METHOD — the flow policy and its conformance test, the shared genre
 vocabulary, the documentation model and Markdown backend, and a pure
 resistive IR solver. All of it is usable on any process.
 
-The three process ports that consume it (`spec2si-tsmc65`,
-`spec2si-tsmc28`, `spec2si-xt011`) are **internal and all-rights-
+The four process ports that consume it (`spec2si-tsmc65`,
+`spec2si-tsmc28`, `spec2si-xt011`, `spec2si-sky130`) are **internal and all-rights-
 reserved**, because a port necessarily encodes foundry NDA material.
 That split is deliberate, and it is why this repository can be shared
 without a confidentiality scrub of a thousand files.
