@@ -113,6 +113,7 @@ def features(path, now):
                     except (OSError, IOError):
                         pass
     return {
+        "kind": "run_dir",
         "name": name,
         "path": path,
         "base": base_name(name),
@@ -128,6 +129,206 @@ def features(path, now):
         "has_keep": os.path.exists(os.path.join(path, ".keep")),
         "empty": len(files) == 0,
     }
+
+
+# ── digital flows are a DIFFERENT ARTIFACT MODEL ─────────────────────────
+#
+# ⚠️⚠️ **DO NOT APPLY THE RUN-DIR RULES TO A P&R FLOW.** An analog run dir is
+# one run; a digital flow directory is ONE tree holding every stage of one
+# run, and the differences are not cosmetic:
+#
+#   * Stage checkpoints (`*.db` from Innovus, `*.odb` from OpenROAD) are NOT
+#     superseded by later stages. Restarting from `place.odb` after `route`
+#     fails is the normal way to work, so the supersession rule -- correct
+#     for `drc_v1`..`drc_v16` -- is actively WRONG here and would delete the
+#     restart points.
+#   * `output/` holds the routed Verilog, the DEF and the merged GDS: the
+#     six-step result and the only input physical signoff has.
+#   * `reports/` is committed evidence; the laptop is the authority for it.
+#
+# And the precedent is on the record: a push with `--delete` already removed
+# `init.odb` and `fplan.odb` from a run that had just produced them, and the
+# way it presented was that logs/ and output/ survived while the run itself
+# was gone (see the ⚠️⚠️ block in deployment/bnl/push.sh).
+#
+# So NONE of those classes are enumerated here at all. Only the scratch that
+# push.sh already excludes from its rsync as "pure garbage" becomes a
+# candidate row -- if it is not in this list it cannot be selected, which is
+# a stronger guarantee than a rule that decides to spare it.
+DIG_SCRATCH = re.compile(r"^(innovus_temp_.*|\.GenusRestruct_.*|\.simvision"
+                         r"|innovus\.(cmd|log|logv)\d*|\.pbs_.*|\.st_launch_.*)$")
+
+
+SCRIPT_EXT = (".sh", ".csh", ".py", ".il", ".tcl", ".pl", ".awk")
+
+
+def _tracked_paths(root):
+    """Files git tracks under `root`, as absolute paths, or None if `root`
+    is not a repo.
+
+    ⚠️ **A TRACKED SCRIPT IS SOURCE, NOT SCRATCH, AND AGE SAYS NOTHING
+    ABOUT WHICH.** `photonic_wirebond` holds 13 tracked `.sh` files and they
+    look exactly like the 140 loose ones in $HOME: same extension, same
+    "untouched for months". Sweeping one moves a file out of a working tree
+    and shows up as an unexplained deletion in `git status`, which is a
+    worse failure than the clutter it was cleaning."""
+    if not os.path.isdir(os.path.join(root, ".git")):
+        return None
+    try:
+        import subprocess
+        out = subprocess.check_output(["git", "ls-files"], cwd=root,
+                                      stderr=open(os.devnull, "wb"))
+    except Exception:                                       # noqa: BLE001
+        return set()            # a repo we cannot query: spare everything
+    return set(os.path.join(root, p) for p in
+               out.decode("utf-8", "replace").split("\n") if p)
+
+
+def _referenced_names(home):
+    """Basenames mentioned by a login file or the crontab. Something the
+    shell sources on every login is not scratch whatever its mtime."""
+    names = set()
+    for f in (".bashrc", ".bash_profile", ".cshrc", ".tcshrc", ".profile"):
+        p = os.path.join(home, f)
+        try:
+            with open(p, "rb") as fh:
+                txt = fh.read().decode("utf-8", "replace")
+        except (OSError, IOError):
+            continue
+        for m in re.finditer(r"[\w.\-/]+\.(?:sh|csh|py|il|tcl)", txt):
+            names.add(os.path.basename(m.group(0)))
+    try:
+        import subprocess
+        out = subprocess.check_output(["crontab", "-l"],
+                                      stderr=open(os.devnull, "wb"))
+        for m in re.finditer(r"[\w.\-/]+\.(?:sh|csh|py|il|tcl)",
+                             out.decode("utf-8", "replace")):
+            names.add(os.path.basename(m.group(0)))
+    except Exception:                                       # noqa: BLE001
+        pass
+    return names
+
+
+def loose_file_rows(now):
+    """Loose files in $HOME and loose SCRIPTS one level into each project.
+
+    Both were previously handled by a `find` inside attic_sweep.sh, i.e. a
+    SECOND definition of stale living beside the classifier -- the exact
+    thing splitting features from decision was meant to prevent. They are
+    rows now, judged by the same cascade as everything else."""
+    rows = []
+    home = os.path.expanduser("~")
+    docs = os.path.join(home, "Documents")
+    referenced = _referenced_names(home)
+
+    def add(p, kind, tracked):
+        base = os.path.basename(p)
+        if base.startswith("."):
+            return                      # dotfiles are never candidates
+        try:
+            st = os.lstat(p)
+        except OSError:
+            return
+        rows.append({
+            "kind": kind, "name": base, "path": p,
+            "base": base_name(os.path.splitext(base)[0]),
+            "n_files": 1, "truncated": False,
+            "size_mb": round(st.st_size / 1048576.0, 2),
+            "age_days": round((now - st.st_mtime) / 86400.0, 1),
+            "mtime": st.st_mtime, "has_signoff": False,
+            "has_wreckage": False, "completed": True, "confirmed": False,
+            "has_keep": False, "empty": False,
+            "tracked": tracked, "referenced": base in referenced,
+        })
+
+    for e in sorted(os.listdir(home)):
+        p = os.path.join(home, e)
+        if os.path.isfile(p):
+            add(p, "home_loose", False)
+
+    if os.path.isdir(docs):
+        for proj in sorted(os.listdir(docs)):
+            root = os.path.join(docs, proj)
+            if not os.path.isdir(root):
+                continue
+            tracked = _tracked_paths(root)
+            try:
+                entries = sorted(os.listdir(root))
+            except OSError:
+                continue
+            for e in entries:
+                p = os.path.join(root, e)
+                if not os.path.isfile(p):
+                    continue
+                if not e.endswith(SCRIPT_EXT):
+                    continue
+                add(p, "proj_script",
+                    tracked is not None and p in tracked)
+    return rows
+
+
+def dig_scratch_rows(now):
+    """Scratch under `~/Documents/*/dig_flows/*/`, one row per item.
+
+    Numbered tool logs (`innovus.cmd`, `.cmd1`.. `.cmd4`) group under one
+    `base` exactly as the run dirs do, so the newest invocation's log is
+    kept and the earlier ones read as superseded rather than merely old."""
+    rows = []
+    docs = os.path.join(os.path.expanduser("~"), "Documents")
+    if not os.path.isdir(docs):
+        return rows
+    for proj in sorted(os.listdir(docs)):
+        flows = os.path.join(docs, proj, "dig_flows")
+        if not os.path.isdir(flows):
+            continue
+        for flow in sorted(os.listdir(flows)):
+            fdir = os.path.join(flows, flow)
+            if not os.path.isdir(fdir):
+                continue
+            try:
+                entries = os.listdir(fdir)
+            except OSError:
+                continue
+            for e in entries:
+                if not DIG_SCRATCH.match(e):
+                    continue
+                p = os.path.join(fdir, e)
+                try:
+                    st = os.lstat(p)
+                except OSError:
+                    continue
+                size = st.st_size
+                newest = st.st_mtime
+                nf = 1
+                if os.path.isdir(p):
+                    files, _trunc = walk_limited(p)
+                    nf = len(files)
+                    for dirpath, fn in files:
+                        try:
+                            s2 = os.lstat(os.path.join(dirpath, fn))
+                        except OSError:
+                            continue
+                        size += s2.st_size
+                        if s2.st_mtime > newest:
+                            newest = s2.st_mtime
+                rows.append({
+                    "kind": "dig_scratch",
+                    "name": e,
+                    "path": p,
+                    "base": base_name(re.sub(r"\d+$", "", e)),
+                    "n_files": nf,
+                    "truncated": False,
+                    "size_mb": round(size / 1048576.0, 2),
+                    "age_days": round((now - newest) / 86400.0, 1),
+                    "mtime": newest,
+                    "has_signoff": False,
+                    "has_wreckage": False,
+                    "completed": True,     # a log IS its own terminal artifact
+                    "confirmed": False,
+                    "has_keep": False,
+                    "empty": nf == 0,
+                })
+    return rows
 
 
 def main():
@@ -150,6 +351,18 @@ def main():
                     rows.append(features(p, now))
                 except OSError as e:
                     sys.stderr.write("skip %s: %s\n" % (p, e))
+    # ⚠️ A TREE WITH NO `analog/work` WAS INVISIBLE, AND THAT IS WHERE THE
+    # DATA IS. The roots above are `~/Documents/*/{analog/work,work}`, so
+    # `LDRD_2022` and `LDRD_2025` -- which have `dig_flows/` and no
+    # `analog/work` -- were never enumerated at all. LDRD_2025/dig_flows is
+    # 36 GB, seventy times every analog tree put together, and the sweep had
+    # never looked at it.
+    n_run = len(rows)
+    rows.extend(dig_scratch_rows(now))
+    n_dig = len(rows) - n_run
+    rows.extend(loose_file_rows(now))
+    sys.stderr.write("%d run dirs, %d dig scratch, %d loose files\n"
+                     % (n_run, n_dig, len(rows) - n_run - n_dig))
 
     # ── supersession: a LATER COMPLETED sibling with the same base ───────
     # Computed across the whole set rather than per dir, because it is a

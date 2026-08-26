@@ -136,21 +136,79 @@ for w in "$HOME"/Documents/*/analog/work "$HOME"/Documents/*/work; do
     done
 done
 
-# ── 2. loose files in $HOME (never dotfiles) ─────────────────────────────
+# ── 1b. everything else the classifier selected ──────────────────────────
+#
+# ⚠️ **THE LOOP ABOVE ONLY VISITS `*/analog/work/*/`, SO IT CANNOT ACT ON A
+# SELECTION OUTSIDE IT.** When digital-flow scratch joined the feature set
+# the classifier began selecting 610 items the sweep would never have
+# reached -- it would have reported them as chosen and moved none of them,
+# which reads exactly like a clean tree. Anything on the list that the walk
+# did not already handle is moved here, by its own path.
+#
+# These entries are FILES as often as directories (`innovus.log3`), and
+# every one of them is scratch by construction: `run_features.py` never
+# enumerates `output/`, `reports/`, `*.db` or `*.odb`, so they cannot appear
+# on this list. Verified after the change: 0 of 808 selections matched a
+# protected class.
+dig=0
+if [ -n "$SWEEP_LIST" ]; then
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        case "$p" in "$HOME"/Documents/*/analog/work/*|"$HOME"/Documents/*/work/*)
+            continue ;;              # already handled by the walk above
+        esac
+        [ -e "$p" ] || continue
+        case "$p" in
+            "$HOME"/Documents/*)
+                rel=${p#$HOME/Documents/}
+                sub=$(dirname "$rel" | sed 's|/|_|g') ;;
+            "$HOME"/*)
+                sub=HOME ;;               # loose $HOME files land readably
+            *)  sub=other ;;
+        esac
+        dest="$ATTIC/$STAMP/$sub"
+        if [ "$APPLY" = 1 ]; then
+            mkdir -p "$dest"
+            if mv "$p" "$dest/$(basename "$p")" 2>/dev/null; then
+                dig=$((dig + 1))
+            else
+                say "  FAILED $p (a live tool may hold an .nfs handle in it)"
+            fi
+        else
+            dig=$((dig + 1))
+        fi
+    done < "$SWEEP_LIST"
+fi
+say "  $([ $APPLY = 1 ] && echo moved || echo 'would move') $dig item(s) outside the run-dir walk (digital scratch, loose files, scratch scripts)"
+
+# ── 2. loose files in $HOME ──────────────────────────────────────────────
+#
+# ⚠️ THIS USED TO BE ITS OWN `find ! -newermt`, which was a SECOND
+# DEFINITION OF STALE sitting beside the classifier -- precisely what
+# splitting features from decision was meant to stop. It also could not see
+# what the classifier can: that a loose `.sh` may be GIT-TRACKED SOURCE
+# (photonic_wirebond has 13) or named by a login file, neither of which age
+# distinguishes from a scratch script. Those rows are classified now, and
+# step 1b above moves whatever is selected, $HOME included.
 loose=0
-while IFS= read -r f; do
-    [ -f "$f" ] || continue
-    base=$(basename "$f")
-    case "$base" in .*) continue ;; esac          # dotfiles stay, always
-    dest="$ATTIC/$STAMP/HOME"
-    if [ "$APPLY" = 1 ]; then
-        mkdir -p "$dest"
-        mv "$f" "$dest/$base" 2>/dev/null && loose=$((loose + 1))
-    else
-        loose=$((loose + 1))
-    fi
-done < <(find "$HOME" -maxdepth 1 -type f ! -newermt "-${DAYS} days" 2>/dev/null)
-say "  $([ $APPLY = 1 ] && echo moved || echo 'would move') $loose loose file(s) from \$HOME (dotfiles untouched)"
+if [ -n "$SWEEP_LIST" ]; then
+    loose=$(grep -c "^$HOME/[^/]*$" "$SWEEP_LIST" 2>/dev/null || echo 0)
+else
+    # fallback only, and it is the blunt rule: no classifier, no guards
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        base=$(basename "$f")
+        case "$base" in .*) continue ;; esac      # dotfiles stay, always
+        dest="$ATTIC/$STAMP/HOME"
+        if [ "$APPLY" = 1 ]; then
+            mkdir -p "$dest"
+            mv "$f" "$dest/$base" 2>/dev/null && loose=$((loose + 1))
+        else
+            loose=$((loose + 1))
+        fi
+    done < <(find "$HOME" -maxdepth 1 -type f ! -newermt "-${DAYS} days" 2>/dev/null)
+fi
+say "  $([ $APPLY = 1 ] && echo counted || echo 'would move') $loose loose \$HOME file(s) (dotfiles never)"
 
 # ── 3. expire the attic ──────────────────────────────────────────────────
 expired=0

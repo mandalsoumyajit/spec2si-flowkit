@@ -49,6 +49,38 @@ def classify(r, age_days=14):
     that fires wins, and the order encodes the cost asymmetry."""
     if r.get("has_keep"):
         return KEEP, "explicit .keep marker", "certain"
+    # ⚠️ DIGITAL SCRATCH IS ITS OWN CLASS AND MUST NOT MEET THE RUN-DIR
+    # RULES. A P&R flow keeps every stage checkpoint on purpose -- restarting
+    # from `place.odb` after routing fails is the normal way to work -- so
+    # "superseded by a later stage" is true and CATASTROPHIC there.
+    # `run_features.py` never enumerates `output/`, `reports/`, `*.db` or
+    # `*.odb` at all, so anything reaching this branch is scratch by
+    # construction, and age is then the whole question: the only scratch
+    # worth keeping belongs to a run that is still going.
+    if r.get("kind") == "dig_scratch":
+        if r.get("superseded_by"):
+            return SWEEP, "superseded by " + r["superseded_by"], "high"
+        age = r.get("age_days") or 0
+        if age > age_days:
+            return SWEEP, "digital scratch, untouched %.0fd" % age, "high"
+        return KEEP, "scratch of a run still active (%.0fd)" % age, "low"
+    # ── loose files and scratch scripts ─────────────────────────────────
+    # Two guards before age gets a vote, because a loose `.sh` in a project
+    # directory is indistinguishable BY AGE from real source:
+    #   tracked     -- git has it, so it is source and sweeping it shows up
+    #                  as an unexplained deletion in `git status`
+    #   referenced  -- a login file or the crontab names it, so something
+    #                  runs it whatever its mtime says
+    if r.get("kind") in ("home_loose", "proj_script"):
+        if r.get("tracked"):
+            return KEEP, "tracked by git -- source, not scratch", "certain"
+        if r.get("referenced"):
+            return KEEP, "referenced by a login file or the crontab", "certain"
+        age = r.get("age_days") or 0
+        if age > age_days:
+            return SWEEP, "loose %s, untouched %.0fd" % (
+                "script" if r["kind"] == "proj_script" else "file", age), "medium"
+        return KEEP, "loose but recent (%.0fd)" % age, "low"
     if r.get("empty"):
         return SWEEP, "empty directory", "certain"
     if r.get("has_wreckage") and not r.get("completed"):
