@@ -27,11 +27,11 @@ for r in flowkit tsmc65 tsmc28 xt011 sky130; do cd /c/dev/spec2si-$r; \
 
 | repo | branch | HEAD | unpushed | notes |
 |---|---|---|---|---|
-| flowkit | `routekit` | 996a78b | 0 (pushed) | **NOT merged to main** — the merge is the owner's call |
-| tsmc65 | main | e8eb950 | **7** | dirty: `analog/specs/runlog_stats.json` (auto-stats, theirs) |
-| tsmc28 | main | 190c282 | **8** | includes the tile 48/71 JSON, the audit/solve bindings, P_METAL_FAMILY, the probe arm |
-| xt011 | **`ring-rev3`** | 788d9f9 | no upstream | the vendor + VIAGEO commits ride this branch; merges with the ring work |
-| sky130 | main | ac740a1 | **7** | includes the card build-out (all four gates passed) |
+| flowkit | `routekit` | f9a8911 | 0 (pushed) | **NOT merged to main** — the merge is the owner's call |
+| tsmc65 | main | 6d959db | **8** | + the binding/arm commit; dirty: `analog/specs/runlog_stats.json` (auto-stats, theirs) |
+| tsmc28 | main | 1419d44 | **9** | + the vendored refresh |
+| xt011 | **`ring-rev3`** | 788d9f9 | no upstream | vendored refresh sits UNCOMMITTED in-tree again — a live ring session was mid-edit both times; commit `routekit/` there once it lands |
+| sky130 | main | dbae638 | **8** | + the vendored refresh |
 
 ⚠️ **Nothing here pushes a consumer.** Every consumer's unpushed commits
 are deliberate: their owners push/PR on their own flow. The flowkit
