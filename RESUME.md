@@ -27,11 +27,11 @@ for r in flowkit tsmc65 tsmc28 xt011 sky130; do cd /c/dev/spec2si-$r; \
 
 | repo | branch | HEAD | unpushed | notes |
 |---|---|---|---|---|
-| flowkit | **main** | 44711ba | 0 (pushed) | `routekit` MERGED to main (fast-forward); the branch is kept in sync with main |
-| tsmc65 | main | 32bf0b4 | 0 (pushed) | extract round landed; dirty: `analog/specs/runlog_stats.json` (auto-stats, theirs) |
-| tsmc28 | main | 593ebae | 0 (pushed) | ⚠️ the task_6675958d session is LIVE in this checkout (routing.py/process.py edits, viapair_probe, AND a hand-edit to the vendored `routekit/audit.py` — the 1-file `--check-all` drift is theirs; reconcile when their session lands: upstream the audit change or revert it, never leave a vendored copy edited) |
-| xt011 | `ring-rev3` | 2c53bf6 | 0 (pushed) | vendored refreshes ride the ring branch |
-| sky130 | main | a970f96 | 0 (pushed) | vendored refreshes |
+| flowkit | **main** | 2ab737b | 0 (pushed) | `routekit` MERGED to main (fast-forward); the branch is kept in sync with main |
+| tsmc65 | main | 614f7c7 | 0 (pushed) | extract round + width_for re-point landed; dirty: `analog/specs/runlog_stats.json` (auto-stats, theirs) |
+| tsmc28 | main | cbd3629 | **1** | ⚠️ task_6675958d committed (unpushed): **it REFUTED the rkpair attribution** — my experiment's 1.16 µm M3 cap made every island an R.3 SITE (the deck picks the tier from EITHER conductor: `(M2Wide AND M3i) OR (M3Wide AND M2i)`), so "2-square pairs fail at every gap" was R.3 doing what it says; their 31-island `viapair_probe` measured R.2 pairs LEGAL at 0.080/0.095/0.100 (ceiling merges on abutment), firing at 0.105 — the flow's `space=max_space` construction is FINE. RECONCILE when the session ends: upstream their vendored `audit.py` hand-edit (site-tier-by-either-metal in the gate), re-vendor tsmc28 (elec.solve_width is not there yet), and CORRECT the wrong prose my round left in `ruleprobe.py`'s comments (the "never ride the ceiling" and "only the 2x2 is quiet" claims — the geometry I ship is still deck-quiet, but for R.3-site reasons, and the wide_landing cap should become a narrow strap so the probe tests the tier it names) |
+| xt011 | `ring-rev3` | 3fdeb3a | 0 (pushed) | vendored refreshes ride the ring branch |
+| sky130 | main | 7c7b1ad | 0 (pushed) | vendored refreshes |
 
 ⚠️ **Nothing here pushes a consumer.** Every consumer's unpushed commits
 are deliberate: their owners push/PR on their own flow. The flowkit
