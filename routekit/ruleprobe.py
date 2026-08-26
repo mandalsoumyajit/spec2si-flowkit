@@ -67,8 +67,14 @@ def _assert_on_grid(out, grid):
                                 p["name"], v, r[0], grid))
 
 
-def probes(rules, layer="M2", cut=None, grid=0.005):
+def probes(rules, layer="M2", cut=None, grid=0.005, via_met=None):
     """Build the probe set for one metal layer (and optionally one cut).
+
+    `via_met` maps a cut layer to its (lower, upper) metals; defaults
+    to `audit.VIA_MET` (the M1..M9 vocabulary). A port whose kit names
+    its metals differently (xt011's MET1..METCT) passes its own table
+    -- the old `M%d` string arithmetic silently skipped every via
+    probe on such a kit.
 
     Returns a list of dicts:
         {name, expect, layer, violation: [rec..], clean: [rec..]}
@@ -247,13 +253,18 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
         out.append(dict(name="wide_landing", skipped=str(e)))
         return out
     lo = layer                       # treat `layer` as the lower metal
-    n = int(cut[3:]) if cut[3:].isdigit() else None
-    hi = ("M%d" % (n + 1)) if (lo == ("M%d" % n) if n else False) else None
+    pair = (via_met if via_met is not None else audit.VIA_MET).get(cut)
+    hi = pair[1] if pair and pair[0] == lo else None
     if hi is None:
-        out.append(dict(
-            name="via_enclosure",
-            skipped="cannot name the upper metal for {} over {} -- pass "
-                    "a matching layer/cut pair".format(cut, lo)))
+        # ⚠️ BOTH via probes are named skips -- the cannot-name branch
+        # used to drop wide_landing silently, the same shrink the
+        # refused-geometry branch was fixed for (found by the xt011
+        # binding, whose MET vocabulary the old M%d arithmetic could
+        # not spell)
+        why = ("cannot name the upper metal for {} over {} -- pass "
+               "via_met with the kit's own pairs".format(cut, lo))
+        out.append(dict(name="via_enclosure", skipped=why))
+        out.append(dict(name="wide_landing", skipped=why))
     else:
         big = 8 * cw
 
@@ -464,11 +475,12 @@ def _findings(rules, probe, rec):
     raise ValueError("no gate mapped for probe " + name)
 
 
-def selfcheck(rules, layer="M2", cut=None, grid=0.005):
+def selfcheck(rules, layer="M2", cut=None, grid=0.005, via_met=None):
     """The offline negative control. Returns findings -- [] means every
     constructible violation FIRES and every clean twin is SILENT."""
     out = []
-    for p in probes(rules, layer=layer, cut=cut, grid=grid):
+    for p in probes(rules, layer=layer, cut=cut, grid=grid,
+                    via_met=via_met):
         if "skipped" in p:
             continue
         if p.get("offline_unjudged"):
