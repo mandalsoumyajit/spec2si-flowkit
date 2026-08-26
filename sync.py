@@ -118,6 +118,13 @@ FILES = [
     ("routekit/ruleprobe.py", "routekit/ruleprobe.py"),
     ("routekit/test_card.py", "routekit/test_card.py"),
     ("routekit/test_ruleprobe.py", "routekit/test_ruleprobe.py"),
+    # Phase 3: the search core. glue_solver (signed 136/136) as the
+    # tile campaign generalized it (per-tier pads, phase-agnostic
+    # arrivals, per-terminal access tiers -- each documented in place
+    # to reduce exactly), behind ONE seam: bind(adapter, via_table,
+    # route_tiers, ...). Consumers keep a thin binding shim.
+    ("routekit/solve.py", "routekit/solve.py"),
+    ("routekit/test_solve.py", "routekit/test_solve.py"),
 ]
 
 
