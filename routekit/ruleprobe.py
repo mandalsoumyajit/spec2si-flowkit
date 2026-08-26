@@ -156,23 +156,32 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
     # Found by selfcheck refusing, which is the offline arm doing its
     # job before a licence was spent.
     bar = 4 * w
+    # ⚠️ THE BARS MUST BE LONGER THAN THE BRIDGE IS WIDE, or the "U"
+    # DEGENERATES into a solid block and the probe tests nothing: at
+    # w=0.4 (tsmc65 M8) L = 4w = bar, the bridge spanned the full
+    # width, and the island was silently solid -- masked on the deck
+    # runs because the SPACING island shares the M8.S. family pattern,
+    # and caught offline the moment the extract round turned the
+    # spacing gate on for the thick tiers.
+    Ln = max(L, 2 * bar)
     notch_gap = s
     try:
         for tier in rules.wide_metal_tiers(layer):
-            if bar > tier["width_gt_um"] + 1e-9 and                     L > tier["parallel_run_gt_um"] + 1e-9:
+            if bar > tier["width_gt_um"] + 1e-9 and                     Ln > tier["parallel_run_gt_um"] + 1e-9:
                 notch_gap = max(notch_gap, tier["space_um"])
     except Exception:                                       # noqa: BLE001
         pass
     out.append(dict(
         name="notch", expect="notch {} < {}".format(bad_gap, s),
         layer=layer, offline_unjudged=_unj,
-        violation=[_rec(layer, 0, 0, L, bar, "a"),
-                   _rec(layer, 0, bar + bad_gap, L, 2 * bar + bad_gap, "a"),
-                   _rec(layer, L - bar, 0, L, 2 * bar + bad_gap, "a")],
-        clean=[_rec(layer, 0, 0, L, bar, "a"),
-               _rec(layer, 0, bar + notch_gap, L,
+        violation=[_rec(layer, 0, 0, Ln, bar, "a"),
+                   _rec(layer, 0, bar + bad_gap, Ln,
+                        2 * bar + bad_gap, "a"),
+                   _rec(layer, Ln - bar, 0, Ln, 2 * bar + bad_gap, "a")],
+        clean=[_rec(layer, 0, 0, Ln, bar, "a"),
+               _rec(layer, 0, bar + notch_gap, Ln,
                     2 * bar + notch_gap, "a"),
-               _rec(layer, L - bar, 0, L, 2 * bar + notch_gap, "a")]))
+               _rec(layer, Ln - bar, 0, Ln, 2 * bar + notch_gap, "a")]))
 
     # -- min area ----------------------------------------------------
     try:
@@ -248,33 +257,73 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
     else:
         big = 8 * cw
 
-        # ⚠️ A PAD MUST CLEAR ITS METAL'S OWN MIN-AREA. A cut-wide pad
-        # extended only by the enclosure is a tiny isolated island, and
-        # the tsmc28 deck answered the first via clean twin with
-        # M2.A.2 + M2.A.3 -- probing the pad's area, not the
-        # enclosure. Extend ALONG (more enclosure is legal) until the
-        # area clears, where the card answers min_area; a refusing
-        # card keeps the enclosure-only pad.
-        def _pad_ext(metal):
-            ext = e_along
+        # ⚠️ A CLEAN PAD MUST BE LEGAL METAL IN ITS OWN RIGHT: clear of
+        # its metal's MIN-AREA (the tsmc28 deck answered the first via
+        # clean twin with M2.A.2+A.3 -- probing the pad's area, not the
+        # enclosure) and no narrower than its metal's MIN-WIDTH (a
+        # cut-width M9 strap over VIA8 is 5x under M9.W.1 -- the tsmc65
+        # thick tiers made this class real). Width grows ACROSS by
+        # symmetric grid-snapped offsets, length ALONG until the area
+        # clears; a card refusing either answer keeps the smaller pad.
+        def _pad(metal):
             try:
-                need = (rules.min_area(metal) / cw - cw) / 2.0
+                mw = rules.min_width(metal)
+            except Exception:                               # noqa: BLE001
+                mw = cw
+            # the ACROSS margin covers the tier's across enclosure too
+            # -- VIAx's 0 hid this until VIAz's 0.02 fired the offline
+            # gate on its own clean twin (selfcheck, no licence spent)
+            off = _ceil_g(max(e_across, (max(mw, cw) - cw) / 2.0), grid)
+            width = cw + 2 * off
+            ext = max(e_along, e_across)
+            try:
+                need = (rules.min_area(metal) / width - cw) / 2.0
                 if need > ext:
                     ext = _ceil_g(need, grid)
             except Exception:                               # noqa: BLE001
                 pass
-            return ext
+            return off, ext
 
-        e_ext = _pad_ext(lo)
+        lo_off, e_ext = _pad(lo)
+        # ⚠️ AN UNGATED REDUNDANCY TIER MAKES A LONE CUT ILLEGAL
+        # EVERYWHERE -- tsmc65's VIA8.R.8 is "at least two VIA8 ... to
+        # connect M9 and M8", no width predicate, so a single-cut clean
+        # twin can never be quiet on that tier. The clean connection
+        # draws the ungated option's cut count at one grid inside its
+        # ceiling; the violation stays a lone flush cut (EN fires, and
+        # the R noise is the same family).
+        need_cuts, ugap = 1, None
+        try:
+            for t in rules.via_redundancy_tiers(rules.via_tier(cut)):
+                if t.get("width_and_length_gt_um") is None:
+                    for o in (t.get("options") or []):
+                        if o.get("shape", "square") == "square" and                                 isinstance(o.get("count"), int):
+                            if o["count"] >= need_cuts:
+                                need_cuts = o["count"]
+                                ms = o.get("max_space_um")
+                                if isinstance(ms, (int, float)):
+                                    ugap = ms
+        except Exception:                                   # noqa: BLE001
+            pass
+        cgap = None
+        if need_cuts > 1:
+            cgap = _floor_g((ugap if ugap is not None else
+                             rules.via_pair_space(cut)) - grid, grid)
         # ⚠️ AND THE UPPER METAL IS A NARROW STRAP, NOT A PLATE. An
         # 8-cut-wide cap is WIDE metal, and redundancy needs only ONE
         # wide side -- (M3Wide AND M2i) in the deck's own body -- so a
         # big cap turns the lone clean cut into a redundancy case:
-        # the tsmc28 clean twin drew VIA2.R.2 from exactly this. A
-        # cut-wide strap, run PERPENDICULAR to the lower pad like a
-        # real route, stays under every wide threshold.
-        he = _pad_ext(hi)
-        hi_v = _rec(hi, -he, 0, cw + he, cw, "a")
+        # the tsmc28 clean twin drew VIA2.R.2 from exactly this. The
+        # strap runs PERPENDICULAR to the lower pad like a real route
+        # and stays at its own minimum width.
+        hi_off, he = _pad(hi)
+        span = cw if cgap is None else (
+            need_cuts * cw + (need_cuts - 1) * cgap)
+        hi_v = _rec(hi, -he, -hi_off, cw + he, cw + hi_off, "a")
+        hi_c = _rec(hi, -he, -hi_off, cw + he, span + hi_off, "a")
+        clean_cuts = [_rec(cut, 0, i * (cw + (cgap or 0)),
+                           cw, i * (cw + (cgap or 0)) + cw, "a")
+                      for i in range(need_cuts)]
         out.append(dict(
             name="via_enclosure",
             expect="{} cut flush on {} -- needs {} along one axis".format(
@@ -282,8 +331,9 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
             layer=lo,
             violation=[_rec(cut, 0, 0, cw, cw, "a"),
                        _rec(lo, 0, 0, cw, cw, "a"), hi_v],
-            clean=[_rec(cut, 0, 0, cw, cw, "a"),
-                   _rec(lo, 0, -e_ext, cw, cw + e_ext, "a"), hi_v]))
+            clean=clean_cuts + [
+                _rec(lo, -lo_off, -e_ext, cw + lo_off,
+                     span + e_ext, "a"), hi_c]))
 
         # -- wide landing (lone cut) ---------------------------------
         try:
@@ -310,6 +360,20 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                             "-- ungated tier, probe not constructible"))
             else:
                 side = _ceil_g(2 * thr, grid)
+                # the plate itself must be LEGAL metal: no narrower
+                # than min-width, no smaller than min-area -- in BOTH
+                # cells, so the violation island's only defect is the
+                # lone cut (tsmc65's thick tiers: M8 min area 0.565
+                # exceeds a 2x-threshold plate)
+                try:
+                    side = max(side, _ceil_g(rules.min_width(lo), grid))
+                except Exception:                           # noqa: BLE001
+                    pass
+                try:
+                    side = max(side, _ceil_g(
+                        rules.min_area(lo) ** 0.5, grid))
+                except Exception:                           # noqa: BLE001
+                    pass
                 pair = rules.via_pair_space(cut)
                 # centred-cut arithmetic goes off-grid whenever side and
                 # cut disagree in grid parity -- snap, same class as the

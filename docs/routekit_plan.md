@@ -142,7 +142,7 @@ digital maze with a weaker rule model than `glue_solver`, same LEF burden.
 |---|---|---|
 | 0 ✅ | Freeze + characterize: corpus in `routekit/corpus.json`; snapshot-vs-scratch policy fixed | every signed artifact replays / verifies — DONE 2026-08-26, see §6 |
 | 1 ✅ | Extract `geom` + `audit` (tsmc28's `audit.py` the base) into routekit; consumers re-point through shims; ADR-0002 records the seam extension | existing route tests green on vendored copies; `sync.py --check-all` clean — DONE 2026-08-26, see §6 |
-| 2 ◕ | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) — core shipped 2026-08-26 (see §6); arms RKP_PASS on sky130 (Pegasus), tsmc28 (Calibre, 11/11 incl. via probes and M7/My — the "deck options" were thick-tier DATATYPE gating, resolved) and tsmc65 (Calibre, all four families); the value-fix rounds landed (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) and the tsmc28 extract round is done for the routing card; remaining: the tsmc65 extract round (line-end S.5/S.6 to/of split, via-enclosure ACROSS, VIAz/VIAu geometry, M8/M9 min-area) and a schema slot for rule APPLICABILITY (the measured-absent `min_edge_rule` consumer key) |
+| 2 ✅ | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) — DONE 2026-08-26: arms RKP_PASS on sky130 (Pegasus), tsmc28 (Calibre 11/11 incl. via probes and M7/My) and tsmc65 (Calibre 24/24, all four families + all three via tiers); the value-fix rounds landed and BOTH extract rounds are done (deckroute65.py / the deck-header reads). Open tails: a schema slot for rule APPLICABILITY (the consumer-side `min_edge_rule` key), and the wide-landing pair-construction flow finding (task_6675958d, running). xt011's card arrives with its phase-4 import |
 | 3 ◕ | Promote the solver + the widen/elec unit; delete the tsmc28 byte-copy | tsmc65 replays the frozen corpus; tsmc28 digests green; inter-repo diff = adapters only — solver promoted + both repos re-pointed 2026-08-26 (see §6); the widen/elec unit remains |
 | 4 | Three live consumers: tsmc65 v2 glue re-route; finish the tsmc28 tile (48/71 → all, then the 11 escapes when ports exist); xt011 `gen_core_route.py` as an import | each routes on the vendored core, audits green, signoff diff clean vs frozen baseline; no new solver file anywhere |
 | 5 | Down the stack: legality M3→M1 one regime at a time (rule-probe negative controls); block-level pilot — one NEW cell per node, zero hand route tables; current map lands; retire duplicates (freeze `rengine/`, collapse xt011's via tables onto the card) | a new cell routes DRC/LVS-clean per node; EM floors trace to computed currents; one via-map definition per repo |
@@ -260,9 +260,35 @@ upstream gates green. What remains of phase 2:
   `gds_layers` now records layer AND datatype); (3) **G.4 stops at
   M7i** — no vertex rule on Mz/Mu, recorded as a measured-absent
   `min_edge_rule` in the family entries (consumer-side key; a schema
-  slot for rule APPLICABILITY is a named follow-up). tsmc65's extract
-  round now owes: line-end S.5/S.6, the via-enclosure ACROSS minimum,
-  VIAz/VIAu geometry, M8/M9 min-area;
+  slot for rule APPLICABILITY is a named follow-up). **The tsmc65
+  extract round is DONE and deck-countersigned (2026-08-26, fourth
+  session): RKP_PASS 24/24.** `deckroute65.py` (deckspace.py's
+  sibling: every numeric deck VARIABLE, live conditional branch,
+  tracked-no-values) feeds a `_apply_extract` overlay in
+  `routecard65.py` where every value that replaces a measured bound is
+  asserted INSIDE it — both min-area bisection brackets CONFIRMED by
+  the deck, M1's signed-practice 0.09 width deck-exact, every prior
+  deck-read constant re-confirmed. The answers: NO plain line-end
+  class on this node either (S.5 is the dense corner form, S.6 the
+  45° bend — flat spacing governs all four families, no pair rule,
+  spacing gate ON everywhere); the via-enclosure ACROSS is a
+  deck-READ zero for VIAx ("Enclosure by M2 >= 0", the EN.2 body's
+  `GOOD 0 ... OPPOSITE`); VIAz/VIAu fully carded
+  (cut/enclosure/redundancy/plate) with **VIA8.R.8 UNGATED** — a lone
+  VIA8 is never legal, the audit gate's documented case now real;
+  M8/M9 min-areas carded. Streaming all three via tiers surfaced
+  three MORE probe-construction classes, each caught OFFLINE by
+  selfcheck before a licence (a clean pad's across margin must cover
+  the tier's nonzero across enclosure — VIAx's zero had hidden it;
+  pads must respect the metal's own min-width/min-area — an M9 strap
+  at cut width is 5× under M9.W.1; an ungated tier needs the clean
+  twin to draw the legal cluster), plus one the deck had silently
+  absorbed: **the notch probe DEGENERATES to a solid block when
+  L = 4w = bar** (tsmc65 M8/M9) — masked because the spacing island
+  shares the `Mn.S.` family pattern, so the earlier thick-tier notch
+  OKs were vacuous; bars now outrun the bridge and the real notches
+  fired M8.S.1/S.2. Via probes are cut-qualified in the scorer (three
+  via islands per cell; a bare "VIA" pattern would cross-satisfy);
 - **the `P_METAL_FAMILY` round, measured and deferred.** The one-line
   fix (`P_METAL_FAMILY = dict(GRIDCARD["metal_stack"]["rule_family"])`)
   was applied and the suite measured its blast radius: **10 failures in

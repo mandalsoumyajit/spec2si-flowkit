@@ -5,7 +5,7 @@ status: active
 area: top
 owner: soumyajit
 updated: 2026-08-26
-summary: Where routekit stands after the 2026-08-26 sessions and the exact next actions. Phases 0-3 are done or done-with-named-tails, all on this repo's `routekit` branch (pushed, NOT merged to main): the corpus is frozen and every promotion gated on it; geom/audit/card/ruleprobe/solve/elec/gdsw are vendored to all four ports at 33 files / 132 checks; both TSMC ports route through the vendored search core (tsmc65 136/136 from-scratch deterministic, tsmc28 tile 48/71 first run); sky130's cards passed all four gates including its Pegasus golden probe; tsmc28's Calibre golden probe countersigned the engine 5/5 on M2. Next actions in order: merge decisions (this branch; the consumers' unpushed commits), the four named phase-2/3 tails (tsmc65 rules binding then its probe arm; the M7 deck-option investigation; the extract_dr round for My line-end + M7 min-area; route_widen with phase 4), then phase 4's three live consumers, all unblocked. Read the plan (docs/routekit_plan.md) for the full record; this file is only where to START.
+summary: Where routekit stands after the 2026-08-26 sessions and the exact next actions. Phases 0-2 are DONE and MERGED TO MAIN (pushed, all five repos): the corpus frozen; geom/audit/card/ruleprobe/solve/elec/gdsw vendored to all four ports at 33 files / 132 checks; both TSMC ports on the vendored search core; and the golden rule-probe arms RKP_PASS on all three carded ports — sky130 (Pegasus), tsmc28 (Calibre 11/11 incl. via probes; M7/My was thick-tier DATATYPE gating), tsmc65 (Calibre 24/24, four families + three via tiers, extract round deck-countersigned). Phase 3's solver is promoted; its widen/elec unit and phase 4's three live consumers are the open work, plus the wide-landing pair-construction flow finding running as its own session (task_6675958d) and a schema slot for rule applicability. Read the plan (docs/routekit_plan.md) for the full record; this file is only where to START.
 -->
 
 # RESUME — the routekit workstream
@@ -76,9 +76,12 @@ are deliberate: their owners push/PR on their own flow. The flowkit
 
 ## NEXT ACTIONS, in order
 
-1. **Owner decisions**: merge flowkit `routekit` → main (or PR it);
-   push/PR the consumers' unpushed commits. Until the flowkit merge,
-   `sync.py --check-all` gates against the BRANCH's files.
+1. ✅ **DONE 2026-08-26 (fourth session): the owner merges** — flowkit
+   `routekit` fast-forwarded into **main and pushed** (work continues
+   on main; the `routekit` branch is kept in sync); every consumer's
+   commits pushed (tsmc65/tsmc28/sky130 main, xt011 `ring-rev3`).
+   The wide-landing pair-construction flow finding is being worked in
+   its own session (task_6675958d).
 2. ✅ **DONE 2026-08-26 (second session): tsmc65 rules binding + its
    probe arm — RKP_PASS on all four rule families** (plan §6 phase-2
    has the full record). `rules65.py` binds `CardRules` over the
@@ -111,14 +114,19 @@ are deliberate: their owners push/PR on their own flow. The flowkit
    [floor, ceiling] window except the floor (which draws VIA2.S.5);
    only the 2x2 cluster is quiet — `routing.via` builds the rejected
    construction (`rkpair` experiment, asic7 rkprobe/rkpair_run).
-4. **tsmc65 extract round** (cluster; named by its card's own
-   refusals, `rkprobe_expected.json` skip list): line-end `Mx.S.5/S.6`
-   to/of split (fill BOTH `line_end_space_um` and
-   `line_end_pair_space_um`, or drop the pair key if the deck has no
-   distinct rule), the via-enclosure ACROSS minimum, VIAz/VIAu cut
-   geometry, M8/M9 min-area; the deckspace.py transcription pattern is
-   the recipe, and the 28 nm deck's headers-carry-values shortcut may
-   apply to the 65 nm deck's rule bodies too.
+4. ✅ **DONE 2026-08-26 (fourth session): the tsmc65 extract round —
+   RKP_PASS 24/24, all four families + ALL THREE via tiers** (plan §6
+   phase-2 has the record; phase 2 is now ✅). `deckroute65.py`
+   extracts every numeric deck VARIABLE (live branch, tracked, no
+   values); `routecard65.py`'s `_apply_extract` maps + cross-checks
+   (both min-area bisection brackets deck-CONFIRMED). Answers: no
+   plain line-end class here either (flat spacing governs, spacing
+   gate ON everywhere); VIAx across-enclosure is a deck-read ZERO;
+   VIA8.R.8 is UNGATED (lone VIA8 never legal). Three more probe
+   construction classes fixed upstream, all caught offline (across
+   margin, min-width/min-area-legal pads, ungated-tier clean
+   cluster) — and the notch probe DEGENERATED at L=4w=bar on the
+   thick tiers (earlier M8/M9 notch OKs were vacuous; real now).
 5. **Phase 4 — three live consumers, all unblocked on the vendored
    core**: the tsmc65 v2 glue re-route (this is also `route_widen`'s
    port gate — the widen/corridor/reserve machinery deliberately waits
