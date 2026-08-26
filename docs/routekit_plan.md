@@ -238,6 +238,18 @@ the diff between the repos is now adapters only. Gates, measured:
   refuse-without-route_tiers, node constants computed exactly,
   `via_cost` reducing to the flat scalar).
 
+- **The offline self-test, controlled.** `test_glue_solver.py` (never
+  run in phases 0-2; direct-run, routes the die) fails 6 under the new
+  core -- measured against the OLD core at the prior commit: **3
+  pre-date the promotion** (stale against the tree: the dn11
+  access-stack count, the s_lvl/dn0 M6-jog nears) and **3 are pinned to
+  old-core geometry**, two of them because the new core is *stronger*
+  (raw maze 133 -> 136; the no-rip-up control routes all 136, so
+  "displacement is load-bearing" stopped being true on this board). The
+  one to chase: the bundles scenario drops one net (135/136, likely
+  `dac/dn11` -- unverified). A re-pin round is chipped
+  (task: re-pin test_glue_solver to the vendored core).
+
 Remaining in phase 3: the **widen/elec unit** (`route_budget` /
 `route_widen` / ohm pricing beside the solver, per §"Constraints") —
 after it, phase 4's three live consumers.
