@@ -307,8 +307,10 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
             pass
         cgap = None
         if need_cuts > 1:
-            cgap = _floor_g((ugap if ugap is not None else
-                             rules.via_pair_space(cut)) - grid, grid)
+            # at the option's own ceiling exactly: the SIZE-merge
+            # closes on abutment (viapair_probe, 2026-08-26)
+            cgap = _floor_g(ugap if ugap is not None else
+                            rules.via_pair_space(cut), grid)
         # ⚠️ AND THE UPPER METAL IS A NARROW STRAP, NOT A PLATE. An
         # 8-cut-wide cap is WIDE metal, and redundancy needs only ONE
         # wide side -- (M3Wide AND M2i) in the deck's own body -- so a
@@ -379,35 +381,34 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                 # cut disagree in grid parity -- snap, same class as the
                 # stub width above
                 c0 = _floor_g(side / 2.0 - cw / 2.0, grid)
-                pgap = _floor_g(min(pair, side - 2 * cw), grid)
-                if pgap >= pair - 1e-9:
-                    pgap = _floor_g(pgap - grid, grid)
-                # ⚠️ THE CLEAN CLUSTER IS THE TIER'S MOST REDUNDANT
-                # SQUARE OPTION, NOT THE MINIMAL PAIR. Measured on the
-                # tsmc28 deck (rkpair experiment, marker-attributed,
-                # 2026-08-26): a 2-square pair on a wide landing fired
-                # R.2 at EVERY gap from 0.08 to its own 0.10 ceiling, a
-                # pair at the 0.07 floor cleared R.2 but drew VIA2.S.5,
-                # and the single-rectangular option fired despite being
-                # in the rule's prose -- only the 2x2 four-cut cluster
-                # was quiet. The implementation admits a far narrower
-                # construction space than the prose, which is a FLOW
-                # finding (routing.via builds space=max_space pairs);
-                # the probe's clean twin uses what the deck measurably
-                # accepts.
-                # the GOVERNING tier's own options only -- the plate
-                # side sits between this tier's threshold and the next,
-                # so a higher tier's 9-cut option is not this regime's
-                # answer (a 3x3 at pair spacing promptly drew the
-                # enclosure check on four of its cuts)
-                n_sq = 2
-                for o in ((gov.get("options") or []) if gov else []):
-                    if o.get("shape", "square") == "square" and                             isinstance(o.get("count"), int):
-                        n_sq = max(n_sq, o["count"])
+                # ⚠️ THE SITE'S TIER IS SET BY EITHER CONDUCTOR, so the
+                # UPPER metal here is a NARROW STRAP: a big cap promotes
+                # the site into the next tier and the island stops
+                # testing the tier it names -- the rkpair experiment's
+                # 1.16 um cap turned every island into an R.3 site and
+                # its "2-square pairs fail at every gap" conclusion was
+                # that tier behaving as written (refuted by the 31-island
+                # viapair_probe, one variable per island, 2026-08-26).
+                # The clean cluster is the governing tier's SMALLEST
+                # square option -- the construction the flow itself
+                # builds -- at its own ceiling EXACTLY: measured legal
+                # at 0.100 (the SIZE-merge closes on abutment) and
+                # firing at 0.105.
+                n_sq, ospace = 2, pair
+                sq_opts = [o for o in ((gov.get("options") or [])
+                                       if gov else [])
+                           if o.get("shape", "square") == "square" and
+                           isinstance(o.get("count"), int)]
+                if sq_opts:
+                    o = min(sq_opts, key=lambda o: o["count"])
+                    n_sq = o["count"]
+                    if isinstance(o.get("max_space_um"), (int, float)):
+                        ospace = o["max_space_um"]
+                pgap = _floor_g(min(ospace, side - 2 * cw), grid)
                 import math
                 k = int(math.ceil(math.sqrt(n_sq)))
-                # grid of k x k cuts at pgap; grow the landing if the
-                # cluster cannot fit the wide plate
+                # cuts at pgap; grow the landing if the cluster cannot
+                # fit the wide plate
                 span = k * cw + (k - 1) * pgap
                 cside = max(side, _ceil_g(span + 2 * grid, grid))
                 cc0 = _floor_g((cside - span) / 2.0, grid)
@@ -422,15 +423,17 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                         cluster.append(_rec(cut, x0, y0,
                                             x0 + cw, y0 + cw, "a"))
                         placed += 1
-                # ⚠️ BOTH CELLS CARRY THE UPPER METAL. A via with no
-                # metal above it is not a redundancy case, it is a
-                # malformed connection: the tsmc28 clean twin without
-                # it drew M3.EN.1 AND the redundancy rule itself --
-                # the deck's R.2 predicate reads the Mx/Mx+1i pair, and
-                # with no Mx+1 the intended configuration never forms.
-                cap = [_rec(hi, -big, -big, side + big, side + big, "a")]
-                ccap = [_rec(hi, -big, -big, cside + big,
-                             cside + big, "a")]
+                span_x = max(r[3] for r in cluster) - cc0
+                span_y = max(r[4] for r in cluster) - cc0
+                # ⚠️ BOTH CELLS CARRY THE UPPER METAL -- a via with no
+                # metal above it is malformed, not clean (the first
+                # twin without it drew M3.EN.1) -- but as a strap at
+                # its own legal width, never a plate (see above).
+                cap = [_rec(hi, c0 - he, c0 - hi_off,
+                            c0 + cw + he, c0 + cw + hi_off, "a")]
+                ccap = [_rec(hi, cc0 - he, cc0 - hi_off,
+                             cc0 + span_x + he,
+                             cc0 + span_y + hi_off, "a")]
                 out.append(dict(
                     name="wide_landing",
                     expect="lone {} cut on {} x {} {}".format(

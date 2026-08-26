@@ -601,9 +601,36 @@ def via_wide_landing(rules, rec, ref=(), cut_layers=ALL_CUTS):
     and defaulting it to some number invents a threshold the deck does not
     have.
 
-    Same approximation as `via_plates`: the landing is judged per
-    RECTANGLE, so metal that is only wide once several rectangles are
-    unioned is not seen. Stated rather than hidden.
+    ⚠️⚠️ **THE SITE'S TIER IS THE HIGHEST ANY ONE OF ITS TWO CONDUCTORS
+    REACHES, AND CHECKING ONLY THE LOWEST PASSES A CONSTRUCTION THE DECK
+    REJECTS.** This used to take the smallest threshold in the table, ask
+    "is some metal here wider than that", and then accept any second cut
+    within the two-square spacing. Where either metal is over the SECOND
+    threshold that is wrong twice: the tier there wants FOUR squares, and
+    two is not an option in it at any spacing.
+
+    Measured 2026-08-26 over 31 islands (`chip/floorplan/viapair_probe.py`,
+    every one as predicted): a 0.10 um M2 stub landing on a 1.0 um M3 bus
+    draws two `VIA2.R.2__VIA2.R.3` markers for exactly the pair this gate
+    was passing -- and the stub's own width, the only number its caller
+    declared, is 0.10.
+
+    So the tier comes from the WIDEST conductor over the cut, and the test
+    is that tier's whole option table rather than a hard-coded pair: 4
+    squares within 0.10, TWO SLOTS within 0.13, or one slot and two
+    squares within 0.13. The slot options are not decoration -- on a stub
+    too narrow to hold a 2x2 they are the only two-cut construction R.3
+    admits.
+
+    Two stated approximations:
+
+    * Same as `via_plates`: the landing is judged per RECTANGLE, so metal
+      that is only wide once several rectangles are unioned is not seen.
+    * The deck grows each cut `INSIDE OF` the Mx AND Mx+1 OVERLAP, so a
+      merge that would have to leave the overlap does not happen there and
+      does here. That is the permissive direction, and only for cuts
+      straddling the edge of one of their own conductors -- which is what
+      `via_enclosure` is for.
     """
     allsh = list(rec) + list(ref)
     out = []
@@ -622,51 +649,126 @@ def via_wide_landing(rules, rec, ref=(), cut_layers=ALL_CUTS):
         want = [t.get("width_and_length_gt_um") for t in tiers]
         num = [v for v in want if isinstance(v, (int, float))]
         ungated = any(v is None for v in want)
-        thr = min(num) if num else None
-        if thr is None and not ungated:
+        if not num and not ungated:
             continue
-        space = rules.via_pair_space(cut) or 0.1
         try:
             rl, rs = rules.via_rect_cut(cut)
         except Exception:                                   # noqa: BLE001
             rl, rs = None, None
+
+        def _is_slot(c, rl=rl, rs=rs):
+            cw, ch = c[3] - c[1], c[4] - c[2]
+            return (rl is not None and abs(max(cw, ch) - rl) < 1e-9 and
+                    abs(min(cw, ch) - rs) < 1e-9)
+
+        def _group(seed, space, cuts=cuts):
+            """Every cut `seed` merges with at `space`, the way the deck's
+            `SIZE ... BY space/2` does: a CHAIN, not a radius. Four cuts in
+            a row at the ceiling are one merged region, and that row is a
+            construction the deck accepts (measured, `stub_bus_4sq100`)."""
+            grp, frontier = {id(seed): seed}, [seed]
+            while frontier:
+                a = frontier.pop()
+                for o in cuts:
+                    if id(o) in grp:
+                        continue
+                    if max(max(o[1] - a[3], a[1] - o[3]),
+                           max(o[2] - a[4], a[2] - o[4])) <= space + 1e-9:
+                        grp[id(o)] = o
+                        frontier.append(o)
+            return list(grp.values())
+
         for c in cuts:
             cx, cy = (c[1] + c[3]) / 2.0, (c[2] + c[4]) / 2.0
-            cw, ch = c[3] - c[1], c[4] - c[2]
-            if rl is not None and abs(max(cw, ch) - rl) < 1e-9 and \
-                    abs(min(cw, ch) - rs) < 1e-9:
-                continue                        # a slot IS the redundancy
-            wide = ("every connection on this tier", 0.0, 0.0) if (
-                ungated and thr is None) else None
-            for metal in ("M%d" % n, "M%d" % (n + 1)):
-                if wide or thr is None:
-                    break
+            # ⚠️⚠️ THE TIER IS THE SITE'S, AND THE SITE HAS TWO
+            # CONDUCTORS: `(Mx wide AND Mx+1i) OR (Mx+1 wide AND Mxi)`.
+            # The WIDEST metal over this cut chooses the rule -- by its
+            # NARROW dimension, which is what the deck's `WITH WIDTH`
+            # measures.
+            site = None
+            for metal in (VIA_MET.get(cut) or ("M%d" % n, "M%d" % (n + 1))):
                 for s in allsh:
                     if s[0] != metal:
                         continue
                     if not (s[1] - 1e-9 <= cx <= s[3] + 1e-9 and
                             s[2] - 1e-9 <= cy <= s[4] + 1e-9):
                         continue
-                    if (s[3] - s[1] > thr + 1e-9 and
-                            s[4] - s[2] > thr + 1e-9):
-                        wide = (metal, s[3] - s[1], s[4] - s[2])
+                    w, h = s[3] - s[1], s[4] - s[2]
+                    if site is None or min(w, h) > min(site[1], site[2]):
+                        site = (metal, w, h)
+            # the HIGHEST tier any one conductor reaches -- stopping at the
+            # lowest threshold is what passed a pair on an R.3 site
+            gov, thr = None, None
+            for t in tiers:
+                v = t.get("width_and_length_gt_um")
+                if v is None:                    # ungated: applies always
+                    if gov is None:
+                        gov, thr = t, None
+                    continue
+                if site is None or min(site[1], site[2]) <= v + 1e-9:
+                    continue
+                if thr is None or v > thr:
+                    gov, thr = t, v
+            if gov is None:
+                continue
+            # ⚠️ A TIER MAY STATE ITSELF WITHOUT AN OPTION TABLE. The
+            # contract's flat form is `{rule, width_and_length_gt_um,
+            # max_space_um}` -- one construction, two square cuts, which
+            # is what `via_pair_space` is in the protocol for. Reading
+            # only `options` turns such a tier into "nothing satisfies
+            # this" and fires on every cut on it; a card that HAS the
+            # table is the richer case, not the only one.
+            opts = list(gov.get("options", ()))
+            if not opts:
+                opts = [{"count": 2, "shape": "square",
+                         "max_space_um": gov.get("max_space_um") or
+                         rules.via_pair_space(cut) or 0.1}]
+            ok = None
+            for o in opts:
+                space, shape = o.get("max_space_um"), o.get("shape", "square")
+                if space is None:
+                    # the lone-slot option: one cut, no merge, no spacing
+                    if shape == "rectangular" and o.get("count", 1) <= 1 \
+                            and _is_slot(c):
+                        ok = o
                         break
-                if wide:
+                    continue
+                g = _group(c, space)
+                sq = sum(1 for x in g if not _is_slot(x))
+                rect = len(g) - sq
+                if shape == "square" and sq >= o["count"]:
+                    ok = o
+                elif shape == "rectangular" and rect >= o["count"]:
+                    ok = o
+                elif shape == "mixed" and rect >= o.get("rect", 1) and \
+                        sq >= o.get("square", 0):
+                    ok = o
+                if ok:
                     break
-            if not wide:
+            if ok:
                 continue
-            # a second cut close enough to count as one connection
-            if any(o is not c and
-                   max(max(o[1] - c[3], c[1] - o[3]),
-                       max(o[2] - c[4], c[2] - o[4])) <= space + 1e-9
-                   for o in cuts):
-                continue
+            widest = max([o.get("max_space_um") or 0.0
+                          for o in opts] or [0.0])
+            g = _group(c, widest)
             out.append(
-                "WIDE {} {} lone cut @ ({:.3f},{:.3f}) net {} on a "
-                "{:.2f} x {:.2f} {} landing (both > {}) -- needs 2 cuts "
-                "within {} or 1 rectangular"
-                .format(tiers[0]["rule"], cut, cx, cy, c[5],
-                        wide[1], wide[2], wide[0], thr, space))
+                "WIDE {} {} @ ({:.3f},{:.3f}) net {} on a {:.2f} x {:.2f} "
+                "{} site ({}) -- {} cut(s) merge here, and this tier "
+                "accepts only {}"
+                .format(gov["rule"], cut, cx, cy, c[5],
+                        site[1] if site else 0.0, site[2] if site else 0.0,
+                        site[0] if site else "?",
+                        "ungated" if thr is None else "both > %s" % thr,
+                        len(g),
+                        " or ".join(
+                            "{}{} {}{}".format(
+                                o.get("count"),
+                                ("(%d square + %d slot)" % (o.get("square", 0),
+                                                            o.get("rect", 0)))
+                                if o.get("shape") == "mixed" else "",
+                                o.get("shape", "square"),
+                                "" if o.get("max_space_um") is None
+                                else " within %s" % o["max_space_um"])
+                            for o in opts)))
     return out
 
 

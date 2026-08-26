@@ -313,3 +313,74 @@ def test_via_enclosure_per_layer_override_governs_that_metal_only():
     assert audit.via_enclosure(R, rec) == []
     out = audit.via_enclosure(OverrideRules(), rec)
     assert len(out) == 1 and "VIA1:M2" in out[0]
+
+
+# ---- via_wide_landing: the SITE has two conductors (viapair_probe) ------
+
+def _r3_rules():
+    """A two-tier card: R.2 above 0.18, R.3 above 0.44 wanting FOUR
+    squares -- the shape the 28 nm deck measured over 31 islands."""
+    import copy as _copy
+    from routekit.test_card import MINI_CARD
+    from routekit import card as _card
+    c = _copy.deepcopy(MINI_CARD)
+    c["via"]["VIAx"]["redundancy_tiers"] = [
+        {"rule": "VIAx.R.2", "width_and_length_gt_um": 0.18,
+         "options": [{"count": 2, "shape": "square",
+                      "max_space_um": 0.1}]},
+        {"rule": "VIAx.R.3", "width_and_length_gt_um": 0.44,
+         "options": [{"count": 4, "shape": "square",
+                      "max_space_um": 0.1}]},
+    ]
+    return _card.CardRules(c)
+
+
+def _stub_bus(cuts):
+    """A 0.05 um M1 stub landing on a 1.0 um M2 bus -- the R.3 site
+    that hid on the tile's own geometry: the stub's width, the only
+    number its caller declared, is 0.05."""
+    return ([_r("M1", 0, 0, 0.05, 2.0, "a"),
+             _r("M2", -0.5, 0, 0.5, 2.0, "a")] + cuts)
+
+
+def test_wide_landing_tier_is_the_sites_not_one_conductors():
+    """The pair this gate used to PASS on an R.3 site: the tier comes
+    from the WIDEST conductor over the cut, and two squares are not in
+    R.3's table at any spacing."""
+    R = _r3_rules()
+    pair = [_r("VIA1", 0, 0.2, 0.05, 0.25, "a"),
+            _r("VIA1", 0, 0.345, 0.05, 0.395, "a")]
+    out = audit.via_wide_landing(R, _stub_bus(pair))
+    assert len(out) == 2 and "VIAx.R.3" in out[0]
+    quad = [_r("VIA1", x, y, x + 0.05, y + 0.05, "a")
+            for x in (0.0, 0.145) for y in (0.2, 0.345)]
+    # the stub is 0.05 wide; the 2x2 needs a wider one -- widen it and
+    # the site tier STAYS R.3 (the bus's), which is the point
+    rec = [_r("M1", 0, 0, 0.195, 2.0, "a"),
+           _r("M2", -0.5, 0, 0.5, 2.0, "a")] + quad
+    assert audit.via_wide_landing(R, rec) == []
+
+
+def test_wide_landing_a_row_counts_like_a_square():
+    """It is the COUNT, not the shape: four cuts in a ROW at the
+    ceiling are one merged chain (`SIZE BY space/2` merges on
+    abutment), and the deck accepts the row (stub_bus_4sq100)."""
+    R = _r3_rules()
+    row = [_r("VIA1", 0, 0.2 + i * 0.15, 0.05, 0.25 + i * 0.15, "a")
+           for i in range(4)]
+    assert audit.via_wide_landing(R, _stub_bus(row)) == []
+
+
+def test_wide_landing_r2_site_pair_at_the_ceiling_is_legal():
+    """Measured: the flow's own pair is legal at 0.080, 0.095 AND at
+    0.100 -- the ceiling merges on abutment -- and a lone square
+    fires."""
+    R = _r3_rules()
+    site = [_r("M1", 0, 0, 0.36, 0.36, "a"),
+            _r("M2", 0.05, -0.5, 0.15, 0.5, "a")]
+    pair = [_r("VIA1", 0.05, 0.05, 0.1, 0.1, "a"),
+            _r("VIA1", 0.05, 0.2, 0.1, 0.25, "a")]     # gap exactly 0.10
+    assert audit.via_wide_landing(R, site + pair) == []
+    lone = [_r("VIA1", 0.05, 0.05, 0.1, 0.1, "a")]
+    out = audit.via_wide_landing(R, site + lone)
+    assert len(out) == 1 and "VIAx.R.2" in out[0]

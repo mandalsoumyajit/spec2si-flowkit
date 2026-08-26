@@ -236,7 +236,32 @@ upstream gates green. What remains of phase 2:
   rejected construction — flagged to the owner (chip task_6675958d);
   the probe's clean twin now draws the governing tier's most-redundant
   square option. The tsmc28 extract round is thereby DONE for the
-  routing card. **tsmc65 DONE — binding, card and arm in one pass, RKP_PASS
+  routing card.
+  ⛔ **THE FLOW FINDING ABOVE WAS MISATTRIBUTED, AND task_6675958d's
+  session REFUTED it (2026-08-26, its 31-island `viapair_probe`, one
+  variable per island, every verdict pinned in
+  `test_via_redundancy_tiers.py`).** The rkpair experiment's M3 cap
+  (8·cut of margin, 1.16 µm) made every island an **R.3 site — the
+  deck picks the redundancy tier from EITHER conductor**
+  (`(M2Wide AND M3i) OR (M3Wide AND M2i)`), so "2-square pairs fail
+  at every gap" was R.3 requiring four squares, exactly as written.
+  Measured truth: **R.2 pairs are LEGAL at 0.080/0.095/0.100 — the
+  ceiling merges on abutment — and fire at 0.105**; a lone slot is
+  legal in either orientation on R.2; on R.3 it is the COUNT not the
+  shape (4 squares as a 2×2 or a row, two slots at 0.13, or slot+2
+  squares); `WITH WIDTH` reads the narrow dimension. The flow's
+  `space = max_space` construction was fine all along; the REAL
+  defect was model and gate asking about ONE conductor (a 0.10 µm
+  stub on a 1.0 µm bus is an R.3 site the gate passed). Their fix —
+  `partner_um` through `via_redundancy`/`routing.via`, the tier's
+  whole option table, and the site-tier gate in `audit.py` — is now
+  UPSTREAMED with three site-tier poisons, and the probe kit
+  corrected (narrow strap caps so an island tests the tier it names;
+  the clean twin is the governing tier's smallest square option at
+  its exact ceiling). Both arms re-ran RKP_PASS on the corrected
+  constructions. Lesson, permanent: **a probe's upper-metal cap sets
+  the site's tier — one variable per island, and never conclude
+  about a tier the island's own conductors did not select.** **tsmc65 DONE — binding, card and arm in one pass, RKP_PASS
   (Calibre, asic7, 2026-08-26): all FOUR rule families** (M1, Mx, Mz,
   Mu — this stack's ladders genuinely differ, measured). The binding is
   the OTHER designed path: no `tech/process` module exists there, so
