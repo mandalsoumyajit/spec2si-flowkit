@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+"""The RoutingCard contract: load, validate, and bind a rules card.
+
+This formalizes the card discipline the tsmc28 port converged on, so the
+other three ports (and phase 3's solver) consume process facts one way:
+
+  * a card is JSON. A repo may split it in two -- a TRACKED structure
+    card (identifiers, laws, provenance, family membership) and an
+    UNTRACKED values card where the numbers are foundry-confidential
+    (tsmc28's `rules_card.json`, rebuilt on the cluster). `load_split`
+    merges them; a public process (sky130) ships one file.
+  * a value is either a bare number or `{"value": x, "rule": "Mx.W.1",
+    ...provenance}` -- `card_num` accepts both, because the annotated
+    form exists precisely where the rule number and the LEF disagree and
+    someone had to say which is which.
+  * **a metal's rule family is resolved by the family's own `layers`
+    list, and ONLY by it.** The alternative -- a separate layer->family
+    map -- is how tsmc28's `P_METAL_FAMILY` shipped shifted a tier for
+    M5/M6/M7 and handed M7 rules four times too large, measured and
+    worked around in five places before it was fixed. This module does
+    not offer a side-map to get wrong: no `layers` list names the layer,
+    `CardError` names the layer.
+  * **missing is a refusal; absent is an answer.** A key the card does
+    not carry raises `CardError` with the card path that needs the
+    measurement. A rule the process genuinely lacks is recorded as an
+    explicit empty (`"redundancy_tiers": []`) with provenance -- the
+    engine's gate then returns clean by an answered question.
+
+`CardRules` binds a resolved card to the fourteen-accessor `rules`
+protocol `routekit.audit` documents, so a consumer with a conforming
+card needs no hand-written binding at all (tsmc28 keeps its
+`tech/process.py` binding -- both satisfy the same protocol; new ports
+start here).
+
+Python floor: the cluster's 3.6 -- no dataclasses, no walrus, `.format`.
+"""
+import io
+import json
+
+
+class CardError(KeyError):
+    """A process fact the card does not carry. The message names the card
+    path to fill and, where known, the probe that measures it."""
+
+
+def load(path):
+    """One card file, UTF-8 always -- cp1252 Windows defaults have cost
+    41 green gates before (`routekit/corpus.json`, windows_note)."""
+    with io.open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def load_split(structure_path, values_path=None):
+    """A tracked structure card, optionally deep-merged with an untracked
+    values card (values win key-by-key). Returns the resolved dict.
+
+    A missing values FILE is not an error here: the resolved card simply
+    lacks the numeric keys, and every accessor that needs one refuses
+    with the card path -- which turns "the confidential card is absent"
+    into per-fact refusals instead of an import-time crash, exactly the
+    behaviour tsmc28's `routing_rules()` chose."""
+    card = load(structure_path)
+    if values_path is not None:
+        try:
+            values = load(values_path)
+        except (IOError, OSError):
+            return card
+        card = _deep_merge(card, values)
+    return card
+
+
+def _deep_merge(base, over):
+    out = dict(base)
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def card_num(v, default=None):
+    """A number out of the card, whichever shape it is stored in --
+    bare (`0.4`) or annotated (`{"value": 0.05, "rule": "Mx.W.1"}`).
+    Assuming one shape is a measured failure mode: a pitch computed as
+    float + dict died on the first real cell it was asked to build."""
+    if isinstance(v, dict):
+        return v.get("value", default)
+    return default if v is None else v
+
+
+def _need(entry, key, where):
+    if key not in entry:
+        raise CardError(
+            "no {} recorded at {} -- measure it and add it to the card "
+            "(a missing fact is a refusal, never a default)".format(
+                key, where))
+    return entry[key]
+
+
+class CardRules(object):
+    """The generic binding of a resolved card to `routekit.audit`'s
+    `rules` protocol.
+
+    `card` is the resolved mapping (see `load_split`). The sections it
+    reads:
+
+        metal:  {family: {layers: [..], min_width_um, min_space_um,
+                          line_end_space_um[, line_end_def_um],
+                          wide_metal_space_tiers: [..],
+                          min_area_um2[, landing_pad_um], max_width_um}}
+        via:    {tier: {cut_layers: [..], cut_um,
+                        enclosure: {along_um, across_um[, crowded]},
+                        min_space_pair_um[, rect_cut_um],
+                        redundancy_tiers: [..],
+                        plate_proximity_rules: [..]}}
+        min_area_um2: {compact_edge_um}      (optional; family entries
+                                              may carry min_area_um2
+                                              directly instead)
+
+    Every lookup resolves the family/tier by membership lists; every
+    number goes through `card_num`; every miss is a `CardError` naming
+    the path."""
+
+    def __init__(self, card):
+        self._c = card
+
+    # -- family / tier resolution, by membership lists only ----------
+
+    def _metal(self, layer):
+        metal = _need(self._c, "metal", "card root")
+        for fam in sorted(metal):
+            e = metal[fam]
+            if isinstance(e, dict) and layer in (e.get("layers") or []):
+                return fam, e
+        # a single-layer family may omit `layers` and use its own name
+        if layer in metal and isinstance(metal[layer], dict):
+            return layer, metal[layer]
+        raise CardError(
+            "no metal family's `layers` list names {} -- add the layer "
+            "to its family in the card (membership lists are the ONE "
+            "authority; a separate layer->family map is how a port "
+            "shipped M7 with M8's rules)".format(layer))
+
+    def _via(self, cut):
+        via = _need(self._c, "via", "card root")
+        for tier in sorted(via):
+            e = via[tier]
+            if isinstance(e, dict) and cut in (e.get("cut_layers") or []):
+                return tier, e
+        if cut in via and isinstance(via[cut], dict):
+            return cut, via[cut]
+        raise CardError(
+            "no via tier's `cut_layers` list names {} -- add it to the "
+            "card".format(cut))
+
+    # -- the fourteen accessors --------------------------------------
+
+    def min_width(self, layer):
+        fam, e = self._metal(layer)
+        return card_num(_need(e, "min_width_um", "metal." + fam))
+
+    def min_space(self, layer):
+        fam, e = self._metal(layer)
+        return card_num(_need(e, "min_space_um", "metal." + fam))
+
+    def line_end_space(self, layer):
+        fam, e = self._metal(layer)
+        return card_num(_need(e, "line_end_space_um", "metal." + fam))
+
+    def wide_metal_tiers(self, layer):
+        fam, e = self._metal(layer)
+        return _need(e, "wide_metal_space_tiers", "metal." + fam)
+
+    def min_area(self, layer):
+        fam, e = self._metal(layer)
+        if "min_area_um2" in e:
+            return card_num(e["min_area_um2"])
+        sect = self._c.get("min_area_um2") or {}
+        if fam in sect:
+            return card_num(sect[fam])
+        if layer in sect:
+            return card_num(sect[layer])
+        raise CardError(
+            "no min_area_um2 for {} (family {}) in the card".format(
+                layer, fam))
+
+    def landing_pad(self, layer):
+        fam, e = self._metal(layer)
+        return card_num(_need(e, "landing_pad_um", "metal." + fam))
+
+    def compact_edge(self):
+        sect = _need(self._c, "min_area_um2", "card root")
+        return card_num(_need(sect, "compact_edge_um", "min_area_um2"))
+
+    def via_tier(self, cut):
+        tier, _e = self._via(cut)
+        return tier
+
+    def via_geometry(self, cut):
+        tier, e = self._via(cut)
+        cut_um = card_num(_need(e, "cut_um", "via." + tier))
+        enc = _need(e, "enclosure", "via." + tier)
+        along = card_num(_need(enc, "along_um", "via.%s.enclosure" % tier))
+        across = card_num(_need(enc, "across_um",
+                                "via.%s.enclosure" % tier))
+        return (cut_um, along, across)
+
+    def via_enclosure_crowded(self, cut=None):
+        # absent is an ANSWER: a kit without the conditional rule
+        # records nothing and the gate returns [].
+        if cut is None:
+            via = self._c.get("metal") or {}
+            for fam in sorted(via):
+                cr = (via[fam] or {}).get("enclosure_crowded")
+                if cr:
+                    return cr
+            return None
+        _tier, e = self._via(cut)
+        return (e.get("enclosure") or {}).get("crowded")
+
+    def via_redundancy_tiers(self, tier):
+        via = _need(self._c, "via", "card root")
+        if tier not in via:
+            raise CardError("no via tier {} in the card".format(tier))
+        return _need(via[tier], "redundancy_tiers", "via." + tier)
+
+    def via_pair_space(self, cut):
+        tier, e = self._via(cut)
+        return card_num(_need(e, "min_space_pair_um", "via." + tier))
+
+    def via_rect_cut(self, cut=None):
+        if cut is None:
+            raise CardError("via_rect_cut needs a cut layer with this "
+                            "generic binding")
+        tier, e = self._via(cut)
+        rc = _need(e, "rect_cut_um", "via." + tier)
+        if not rc:
+            raise CardError(
+                "via tier {} records no rectangular cut -- the kit has "
+                "none (measured absent)".format(tier))
+        return (card_num(rc[0]), card_num(rc[1]))
+
+    def plate_proximity_rules(self):
+        via = _need(self._c, "via", "card root")
+        out = []
+        for tier in sorted(via):
+            e = via[tier]
+            if isinstance(e, dict) and "plate_proximity_rules" in e:
+                out.extend(e["plate_proximity_rules"])
+        if not any("plate_proximity_rules" in (via[t] or {})
+                   for t in via if isinstance(via[t], dict)):
+            raise CardError(
+                "no via tier records plate_proximity_rules -- record [] "
+                "with provenance if the kit has none (absent is an "
+                "answer; missing is a refusal)")
+        return tuple(out)
+
+
+def validate(card):
+    """Structural findings on a resolved card, as printable strings.
+
+    NOT a rule checker -- a card-shape checker: every finding is a way a
+    card has actually gone wrong. Returns [] for a conforming card."""
+    out = []
+    metal = card.get("metal")
+    if not isinstance(metal, dict) or not metal:
+        out.append("CARD no `metal` section")
+        metal = {}
+    claimed = {}
+    for fam in sorted(metal):
+        e = metal[fam]
+        if not isinstance(e, dict):
+            out.append("CARD metal.{} is not a mapping".format(fam))
+            continue
+        lys = e.get("layers")
+        if lys is None and len(metal) > 1:
+            out.append(
+                "CARD metal.{}: no `layers` membership list -- family "
+                "resolution has nothing to go on (this is the "
+                "P_METAL_FAMILY failure shape)".format(fam))
+        for ly in (lys or []):
+            if ly in claimed:
+                out.append(
+                    "CARD layer {} claimed by families {} AND {}".format(
+                        ly, claimed[ly], fam))
+            claimed[ly] = fam
+    via = card.get("via")
+    if not isinstance(via, dict) or not via:
+        out.append("CARD no `via` section")
+        via = {}
+    cut_claimed = {}
+    for tier in sorted(via):
+        e = via[tier]
+        if not isinstance(e, dict):
+            continue
+        for c in (e.get("cut_layers") or []):
+            if c in cut_claimed:
+                out.append(
+                    "CARD cut {} claimed by tiers {} AND {}".format(
+                        c, cut_claimed[c], tier))
+            cut_claimed[c] = tier
+        if "redundancy_tiers" not in e:
+            out.append(
+                "CARD via.{}: redundancy_tiers not recorded -- record "
+                "[] with provenance if the kit has none".format(tier))
+    return out

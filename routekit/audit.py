@@ -54,11 +54,13 @@ its own tables through the keyword arguments.
 
 Python floor: the cluster's 3.6 -- no dataclasses, no walrus, `.format`.
 """
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import geom                                              # noqa: E402
+try:
+    from . import geom                                   # the vendored package
+except ImportError:                                      # standalone/flat use
+    import os
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import geom                                          # noqa: E402
 
 METALS = ("M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9")
 # Layers the SHORT check runs on. Poly belongs here: the router draws gate

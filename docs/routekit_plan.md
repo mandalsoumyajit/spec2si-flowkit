@@ -142,7 +142,7 @@ digital maze with a weaker rule model than `glue_solver`, same LEF burden.
 |---|---|---|
 | 0 ✅ | Freeze + characterize: corpus in `routekit/corpus.json`; snapshot-vs-scratch policy fixed | every signed artifact replays / verifies — DONE 2026-08-26, see §6 |
 | 1 ✅ | Extract `geom` + `audit` (tsmc28's `audit.py` the base) into routekit; consumers re-point through shims; ADR-0002 records the seam extension | existing route tests green on vendored copies; `sync.py --check-all` clean — DONE 2026-08-26, see §6 |
-| 2 | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) |
+| 2 ◐ | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) — core shipped 2026-08-26 (see §6); cluster arm + the three value-fix rounds remain, recipes recorded |
 | 3 | Promote the solver + the widen/elec unit; delete the tsmc28 byte-copy | tsmc65 replays the frozen corpus; tsmc28 digests green; inter-repo diff = adapters only |
 | 4 | Three live consumers: tsmc65 v2 glue re-route; finish the tsmc28 tile (48/71 → all, then the 11 escapes when ports exist); xt011 `gen_core_route.py` as an import | each routes on the vendored core, audits green, signoff diff clean vs frozen baseline; no new solver file anywhere |
 | 5 | Down the stack: legality M3→M1 one regime at a time (rule-probe negative controls); block-level pilot — one NEW cell per node, zero hand route tables; current map lands; retire duplicates (freeze `rengine/`, collapse xt011's via tables onto the card) | a new cell routes DRC/LVS-clean per node; EM floors trace to computed currents; one via-map definition per repo |
@@ -173,6 +173,44 @@ records the seam extension. Consumers:
   `ancbrain_ring.*` edits; its power gates read 17/43 mid-refactor,
   which is that session's state, not vendoring fallout). Commit the
   `routekit/` directory there once that session lands its work.
+
+**Phase 2 core (2026-08-26).** `routekit/card.py` — the RoutingCard
+contract: load/validate/bind, families and via tiers resolved by
+membership lists ONLY (a shiftable side-map can no longer exist),
+missing-is-a-refusal vs measured-absent-is-an-answer kept apart
+structurally, the tracked/untracked NDA split supported
+(`load_split`), both value shapes via `card_num`. `routekit/ruleprobe.py`
+— card-driven violation/clean geometry pairs per rule kind,
+self-checked against the audit engine: the offline half of the golden
+rule-probe gate; skipped probes carry their reason. Schema written
+field-by-field against the two real instances
+([`routekit_card_schema.md`](routekit_card_schema.md)), including the
+per-layer via-enclosure `overrides` that is the designed home for the
+`M9_VIA8` fix, the EM/RC sections, and the current-map scope. 58
+upstream gates green. What remains of phase 2:
+
+- **the cluster arm** — stream each repo's probes to GDS and diff the
+  deck's answers against `expect` (consumer-side; sky130's is specified
+  in [`routekit_cards_sky130.md`](routekit_cards_sky130.md));
+- **the `P_METAL_FAMILY` round, measured and deferred.** The one-line
+  fix (`P_METAL_FAMILY = dict(GRIDCARD["metal_stack"]["rule_family"])`)
+  was applied and the suite measured its blast radius: **10 failures in
+  4 files** — seven `test_cap_dac_8bit_1_core_plan` tests, one each in
+  `test_cap_dac_8bit_1_plan` and `test_cap_dac_vref_dummy_1_plan`
+  (the CDAC family derives real M5/M6 geometry from the shifted
+  values: `cap_dac_8bit_1_core_bp.py:724` returns
+  `P.min_width("M5")`, `_def.py:836` and `_gt.py` lean on
+  `space_between("M6", ...)`), plus the deliberate sentinel
+  `test_adc_tile_route.py:261`. Reverted. The recipe: freeze each
+  CDAC derivation at its signed value with a provenance note, one
+  file at a time, each gated on its own plan test; then apply the
+  one-line fix; then flip the sentinel to assert 0.1. Belongs in a
+  round with the CDAC owner's attention — the signed generators are
+  the tile campaign's live dependency;
+- **`M9_VIA8`** — schema home exists (`enclosure.overrides`); move the
+  def-file constant into the tsmc28 values card on the cluster;
+- **xt011 VIAGEO** — with xt011's other deferred work, once its live
+  session lands.
 
 ## 6a. Phase 0 — done, and what it measured (2026-08-26)
 

@@ -106,6 +106,18 @@ FILES = [
     ("routekit/audit.py", "routekit/audit.py"),
     ("routekit/test_geom.py", "routekit/test_geom.py"),
     ("routekit/test_audit.py", "routekit/test_audit.py"),
+    # Phase 2: the card contract and the rule probes. card.py loads,
+    # validates and binds a RoutingCard (families by membership lists
+    # ONLY -- the P_METAL_FAMILY failure made structurally impossible;
+    # missing = refusal, measured-absent = answer; tracked/untracked
+    # split for NDA values). ruleprobe.py generates card-driven
+    # violation/clean geometry pairs and self-checks them against the
+    # audit engine -- the offline half of the golden rule-probe gate.
+    # Schema: docs/routekit_card_schema.md.
+    ("routekit/card.py", "routekit/card.py"),
+    ("routekit/ruleprobe.py", "routekit/ruleprobe.py"),
+    ("routekit/test_card.py", "routekit/test_card.py"),
+    ("routekit/test_ruleprobe.py", "routekit/test_ruleprobe.py"),
 ]
 
 

@@ -36,8 +36,8 @@ directories *inside* a port (see [ADR-0001](docs/decisions/0001-process-scoped-r
 
 ## What is shared
 
-Twenty-three files, vendored byte-identically into all four ports and
-hash-gated — 92 checks on every `sync.py --check-all`.
+Twenty-seven files, vendored byte-identically into all four ports and
+hash-gated — 108 checks on every `sync.py --check-all`.
 
 | What | Files | Why it is node-agnostic |
 |---|---|---|
@@ -47,6 +47,7 @@ hash-gated — 92 checks on every `sync.py --check-all`.
 | **The Markdown backend** | `docs/mdbackend.py` | Renders what the model parsed. Three repos rendering three slightly different API pages is the same divergence, one level up |
 | **The IR solver** | `irdrop/solver.py`, `irdrop/currents.py` + their tests | Ohms and amps in, volts out. A Spectre oppoint is a *simulator* format, not a PDK one |
 | **The routing core (phase 1)** | `routekit/geom.py`, `routekit/audit.py` + their tests | Rectangles in, findings out. Every process fact arrives through a `rules` object the consumer binds; a missing fact is a refusal, never a default. See [ADR-0002](docs/decisions/0002-routekit-vendored-core.md) and [the plan](docs/routekit_plan.md) |
+| **The card contract (phase 2)** | `routekit/card.py`, `routekit/ruleprobe.py` + their tests | Load/validate/bind a RoutingCard — families by membership lists only, missing-vs-measured-absent kept apart, NDA split supported — and card-driven rule probes self-checked against the audit engine. [Schema](docs/routekit_card_schema.md) |
 
 Everything here is **stdlib-only and never imports the code it documents or
 analyses**. That is load-bearing: it is why the freshness gate and the
