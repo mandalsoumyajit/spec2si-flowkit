@@ -27,11 +27,11 @@ for r in flowkit tsmc65 tsmc28 xt011 sky130; do cd /c/dev/spec2si-$r; \
 
 | repo | branch | HEAD | unpushed | notes |
 |---|---|---|---|---|
-| flowkit | `routekit` | f9a8911 | 0 (pushed) | **NOT merged to main** — the merge is the owner's call |
-| tsmc65 | main | 6d959db | **8** | + the binding/arm commit; dirty: `analog/specs/runlog_stats.json` (auto-stats, theirs) |
-| tsmc28 | main | 1419d44 | **9** | + the vendored refresh |
-| xt011 | **`ring-rev3`** | 788d9f9 | no upstream | vendored refresh sits UNCOMMITTED in-tree again — a live ring session was mid-edit both times; commit `routekit/` there once it lands |
-| sky130 | main | dbae638 | **8** | + the vendored refresh |
+| flowkit | `routekit` | acf1db3 | 0 (pushed) | **NOT merged to main** — the merge is the owner's call |
+| tsmc65 | main | 3cec7d2 | **9** | binding/arm + pair-field commits; dirty: `analog/specs/runlog_stats.json` (auto-stats, theirs) |
+| tsmc28 | main | 384bd9e | **10** | + the arm-completion commit (gridcard datatypes, streamer via arm, line_end_pair binding) |
+| xt011 | `ring-rev3` | ca97bfb | **1** | the ring session pushed its branch; both vendored refreshes are committed there now |
+| sky130 | main | 5630def | **9** | + the vendored refreshes |
 
 ⚠️ **Nothing here pushes a consumer.** Every consumer's unpushed commits
 are deliberate: their owners push/PR on their own flow. The flowkit
