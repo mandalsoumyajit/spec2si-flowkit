@@ -189,9 +189,24 @@ per-layer via-enclosure `overrides` that is the designed home for the
 `M9_VIA8` fix, the EM/RC sections, and the current-map scope. 58
 upstream gates green. What remains of phase 2:
 
-- **the cluster arm** — stream each repo's probes to GDS and diff the
-  deck's answers against `expect` (consumer-side; sky130's is specified
-  in [`routekit_cards_sky130.md`](routekit_cards_sky130.md));
+- **the cluster arm** — sky130 DONE (Pegasus, asic9: 7 poison families
+  fired, clean twin density-only). **tsmc28 DONE for the Mx family**
+  (Calibre, asic7, 2026-08-26): `ruleprobe_stream.py`/`ruleprobe_run.py`
+  streamed routekit's card-driven probes and every M2 probe drew its
+  exact deck family — M2.S.1/2/3/7/13, BOTH min-area predicates
+  (A.2+A.3), `G.4:M2i` ×4 with the vertex-count shape — the deck
+  countersigning the offline engine. Four named findings: the clean
+  twin's one stray `M2.S.12` (attribute by coordinate); the **M7/My
+  regime is gated behind deck options** (`USER_GUIDE.M7` ×4, zero M7
+  rule evaluations on bare metal — investigate before trusting an
+  M7-regime offline verdict); My `line_end_space_um` and M7
+  `min_area_um2` missing from the values card (extract_dr round); via
+  GDS numbers still unmeasured. The four offline refusals it took to
+  get there (wide-tier notch gap, named line-end skip, off-grid
+  sqrt(area), layer-qualified G.4) each fired before a licence was
+  spent. **tsmc65's arm needs its rules binding first** — routing.py's
+  helpers are not the fourteen-accessor protocol; the binding is the
+  named prerequisite;
 - **the `P_METAL_FAMILY` round, measured and deferred.** The one-line
   fix (`P_METAL_FAMILY = dict(GRIDCARD["metal_stack"]["rule_family"])`)
   was applied and the suite measured its blast radius: **10 failures in
