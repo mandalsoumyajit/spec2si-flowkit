@@ -141,14 +141,40 @@ digital maze with a weaker rule model than `glue_solver`, same LEF burden.
 | # | what | gate |
 |---|---|---|
 | 0 ✅ | Freeze + characterize: corpus in `routekit/corpus.json`; snapshot-vs-scratch policy fixed | every signed artifact replays / verifies — DONE 2026-08-26, see §6 |
-| 1 | Extract `geom` + `audit` (tsmc28's `audit.py` the base) into routekit; consumers re-point through shims; ADR-0002 records the seam extension | existing route tests green on vendored copies; `sync.py --check-all` clean |
+| 1 ✅ | Extract `geom` + `audit` (tsmc28's `audit.py` the base) into routekit; consumers re-point through shims; ADR-0002 records the seam extension | existing route tests green on vendored copies; `sync.py --check-all` clean — DONE 2026-08-26, see §6 |
 | 2 | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) |
 | 3 | Promote the solver + the widen/elec unit; delete the tsmc28 byte-copy | tsmc65 replays the frozen corpus; tsmc28 digests green; inter-repo diff = adapters only |
 | 4 | Three live consumers: tsmc65 v2 glue re-route; finish the tsmc28 tile (48/71 → all, then the 11 escapes when ports exist); xt011 `gen_core_route.py` as an import | each routes on the vendored core, audits green, signoff diff clean vs frozen baseline; no new solver file anywhere |
 | 5 | Down the stack: legality M3→M1 one regime at a time (rule-probe negative controls); block-level pilot — one NEW cell per node, zero hand route tables; current map lands; retire duplicates (freeze `rengine/`, collapse xt011's via tables onto the card) | a new cell routes DRC/LVS-clean per node; EM floors trace to computed currents; one via-map definition per repo |
 | 6 | Optional: OpenROAD benchmark arm (DEF model of the tile glue, cluster `drt`, comparison memo) | memo written; no flow depends on it |
 
-## 6. Phase 0 — done, and what it measured (2026-08-26)
+## 6. Phases 0–1 — done, and what they measured (2026-08-26)
+
+**Phase 1.** `routekit/geom.py` (union-find, subtract/uncovered, exact
+union area, boundary edges) and `routekit/audit.py` (the full tier-1
+gate family) extracted from tsmc28's `audit.py` with one mechanical
+change: every process fact arrives through a `rules` object, and a rules
+object that cannot answer raises. 37 upstream gates beside them, every
+check paired with a poison control. `sync.py` carries five new FILES
+entries (18 → 23; 92 checks per `--check-all`, run clean); ADR-0002
+records the seam extension. Consumers:
+
+- **tsmc28 re-pointed**: `analog/engine/layout/audit.py` is now the
+  28 nm *binding* (rule accessors + `shorts`' one default), public API
+  unchanged for its 21 importers. Witnessed by the full suite — 683
+  passed / 1 skipped / 1 failed both sides of the re-point, the failure
+  being the pre-existing CDAC mirroring plan test.
+- **tsmc65 / sky130**: vendored and committed; nothing imports the
+  engine there yet (tsmc65 re-points with the solver in phase 3;
+  sky130 after its cards). tsmc65's 136/136 glue replay re-verified
+  green after vendoring.
+- **xt011**: vendored into the working tree, commit DEFERRED — a live
+  session is mid-rework on ring revision 3 (uncommitted
+  `ancbrain_ring.*` edits; its power gates read 17/43 mid-refactor,
+  which is that session's state, not vendoring fallout). Commit the
+  `routekit/` directory there once that session lands its work.
+
+## 6a. Phase 0 — done, and what it measured (2026-08-26)
 
 - **tsmc65 @ 552ead53:** the signed snapshot re-solves **136/136, 0 gate
   findings** (audits all zero). From-scratch is **deterministic** — two
