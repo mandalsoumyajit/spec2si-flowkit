@@ -27,11 +27,11 @@ for r in flowkit tsmc65 tsmc28 xt011 sky130; do cd /c/dev/spec2si-$r; \
 
 | repo | branch | HEAD | unpushed | notes |
 |---|---|---|---|---|
-| flowkit | `routekit` | acf1db3 | 0 (pushed) | **NOT merged to main** — the merge is the owner's call |
-| tsmc65 | main | 3cec7d2 | **9** | binding/arm + pair-field commits; dirty: `analog/specs/runlog_stats.json` (auto-stats, theirs) |
-| tsmc28 | main | 384bd9e | **10** | + the arm-completion commit (gridcard datatypes, streamer via arm, line_end_pair binding) |
-| xt011 | `ring-rev3` | ca97bfb | **1** | the ring session pushed its branch; both vendored refreshes are committed there now |
-| sky130 | main | 5630def | **9** | + the vendored refreshes |
+| flowkit | **main** | 44711ba | 0 (pushed) | `routekit` MERGED to main (fast-forward); the branch is kept in sync with main |
+| tsmc65 | main | 32bf0b4 | 0 (pushed) | extract round landed; dirty: `analog/specs/runlog_stats.json` (auto-stats, theirs) |
+| tsmc28 | main | 593ebae | 0 (pushed) | ⚠️ the task_6675958d session is LIVE in this checkout (routing.py/process.py edits, viapair_probe, AND a hand-edit to the vendored `routekit/audit.py` — the 1-file `--check-all` drift is theirs; reconcile when their session lands: upstream the audit change or revert it, never leave a vendored copy edited) |
+| xt011 | `ring-rev3` | 2c53bf6 | 0 (pushed) | vendored refreshes ride the ring branch |
+| sky130 | main | a970f96 | 0 (pushed) | vendored refreshes |
 
 ⚠️ **Nothing here pushes a consumer.** Every consumer's unpushed commits
 are deliberate: their owners push/PR on their own flow. The flowkit
