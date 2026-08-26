@@ -125,6 +125,12 @@ FILES = [
     # route_tiers, ...). Consumers keep a thin binding shim.
     ("routekit/solve.py", "routekit/solve.py"),
     ("routekit/test_solve.py", "routekit/test_solve.py"),
+    # The electrical primitives: EM floors (banded-step aware, refuse
+    # over hope), ohm pricing from card tables, the R_max budget, the
+    # widen fixpoint contract. The route_widen machinery itself lands
+    # with its natural gate, the tsmc65 v2 re-route (plan, phase 4).
+    ("routekit/elec.py", "routekit/elec.py"),
+    ("routekit/test_elec.py", "routekit/test_elec.py"),
 ]
 
 

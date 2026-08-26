@@ -36,8 +36,8 @@ directories *inside* a port (see [ADR-0001](docs/decisions/0001-process-scoped-r
 
 ## What is shared
 
-Twenty-nine files, vendored byte-identically into all four ports and
-hash-gated — 116 checks on every `sync.py --check-all`.
+Thirty-one files, vendored byte-identically into all four ports and
+hash-gated — 124 checks on every `sync.py --check-all`.
 
 | What | Files | Why it is node-agnostic |
 |---|---|---|
