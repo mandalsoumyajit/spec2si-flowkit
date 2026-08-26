@@ -143,7 +143,7 @@ digital maze with a weaker rule model than `glue_solver`, same LEF burden.
 | 0 ✅ | Freeze + characterize: corpus in `routekit/corpus.json`; snapshot-vs-scratch policy fixed | every signed artifact replays / verifies — DONE 2026-08-26, see §6 |
 | 1 ✅ | Extract `geom` + `audit` (tsmc28's `audit.py` the base) into routekit; consumers re-point through shims; ADR-0002 records the seam extension | existing route tests green on vendored copies; `sync.py --check-all` clean — DONE 2026-08-26, see §6 |
 | 2 ✅ | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) — DONE 2026-08-26: arms RKP_PASS on sky130 (Pegasus), tsmc28 (Calibre 11/11 incl. via probes and M7/My) and tsmc65 (Calibre 24/24, all four families + all three via tiers); the value-fix rounds landed and BOTH extract rounds are done (deckroute65.py / the deck-header reads). Open tails: a schema slot for rule APPLICABILITY (the consumer-side `min_edge_rule` key), and the wide-landing pair-construction flow finding (task_6675958d, running). xt011's card arrives with its phase-4 import |
-| 3 ◕ | Promote the solver + the widen/elec unit; delete the tsmc28 byte-copy | tsmc65 replays the frozen corpus; tsmc28 digests green; inter-repo diff = adapters only — solver promoted + both repos re-pointed 2026-08-26 (see §6); the widen/elec unit remains |
+| 3 ✅ | Promote the solver + the widen/elec unit; delete the tsmc28 byte-copy | tsmc65 replays the frozen corpus; tsmc28 digests green; inter-repo diff = adapters only — solver promoted + both repos re-pointed 2026-08-26 (see §6); widen/elec unit DONE 2026-08-26 (fifth session): the router is width-aware (Appendix F retired the translation pass), so the unit is PRODUCER-side — `elec.solve_width` promoted from `route_budget.width_for` with every §10 guard as its regression suite; tsmc65 re-pointed with a byte-identical `--json` replay and the 136/136 corpus replay green |
 | 4 | Three live consumers: tsmc65 v2 glue re-route; finish the tsmc28 tile (48/71 → all, then the 11 escapes when ports exist); xt011 `gen_core_route.py` as an import | each routes on the vendored core, audits green, signoff diff clean vs frozen baseline; no new solver file anywhere |
 | 5 | Down the stack: legality M3→M1 one regime at a time (rule-probe negative controls); block-level pilot — one NEW cell per node, zero hand route tables; current map lands; retire duplicates (freeze `rengine/`, collapse xt011's via tables onto the card) | a new cell routes DRC/LVS-clean per node; EM floors trace to computed currents; one via-map definition per repo |
 | 6 | Optional: OpenROAD benchmark arm (DEF model of the tile glue, cluster `drt`, comparison memo) | memo written; no flow depends on it |
@@ -347,9 +347,31 @@ the diff between the repos is now adapters only. Gates, measured:
   `dac/dn11` -- unverified). A re-pin round is chipped
   (task: re-pin test_glue_solver to the vendored core).
 
-Remaining in phase 3: the **widen/elec unit** (`route_budget` /
-`route_widen` / ohm pricing beside the solver, per §"Constraints") —
-after it, phase 4's three live consumers.
+**Phase 3, widen/elec unit (2026-08-26, fifth session) — DONE, and
+smaller than the plan feared.** The 700-line `route_widen` translation
+pass was never the unit: ROUTE_BUDGET Appendix F retired it when the
+router became width-aware (`solve.Tracks` takes `widths={net: um}` and
+prices the whole band — machinery that rode into `routekit/solve.py`
+with the phase-3 promotion and is exercised by the 136/136 corpus
+replay). What remained was PRODUCER-side: **`elec.solve_width`**, the
+budget→width inversion promoted verbatim from `route_budget.width_for`
+with every guard the 65 nm campaign paid for as its regression suite —
+the via floor as a refusal (not "w = 12 um"), the via-rule dead band
+where the NARROWEST segment decides (topn's five VIAn.R.* through a
+PASS), keep-what-passes idempotence (the loop-self-destruction class),
+the never-below-drawn floor (§10.4's vcm 505→775 from a green gate),
+and the headroom that covers the runs the price model leaves at drawn
+width. Pricing selectivity (only-what-widens) stays in the consumer's
+`price` callable — the seam takes callables and numbers, nothing
+node-shaped. Gates, measured: seven new upstream poisons (95 routekit
+gates); tsmc65's `width_for` re-pointed as a thin binding with a
+**byte-identical `--json` replay** (widths AND why-prose) and the
+corpus replay green (136/136, 0 findings, audits 0/0/0). One
+informational drift recorded: the frozen `route_widths.json`'s `topp`
+`R_drawn_ohm` reads 47.82 where today's tree prices 48.34 — pre-dating
+this change (pre/post identical), a report field only, every width
+decision unchanged; the snapshot-freeze policy covers it. Phase 4's
+three live consumers are now the open work.
 
 **Meanwhile, consumer-side (same day):** the sky130 card build-out
 completed ALL FOUR of its gates (cards on asic6, PCell probe on asic8,

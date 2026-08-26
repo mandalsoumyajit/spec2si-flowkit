@@ -92,3 +92,69 @@ def test_widths_settled_is_a_whole_plan_test():
     assert not elec.widths_settled({"a": 0.1, "b": 0.2}, {"a": 0.1})
     assert not elec.widths_settled({"a": 0.1}, {"a": 0.15})
     assert elec.widths_settled({"a": 0.1}, {"a": 0.1004}, tol_um=0.001)
+
+
+# ---- solve_width: ROUTE_BUDGET's paid-for guards, each with its poison --
+
+def _price(via_ohm, k_ohm_um):
+    """A synthetic route: R = via + k/w (metal inversely to width);
+    price(None) prices as drawn at 0.14 um."""
+    def price(w):
+        use = 0.14 if w is None else w
+        return via_ohm + k_ohm_um / use, via_ohm
+    return price
+
+
+def test_solve_width_via_floor_is_a_refusal_not_a_number():
+    w, why = elec.solve_width(_price(80.0, 10.0), 60.0, 0.14, 0.14)
+    assert w is None and "via floor" in why and "add cuts" in why
+
+
+def test_solve_width_never_shrinks_a_passing_net():
+    """The vcm defect: a net the contract widened, inside budget, must
+    KEEP its width -- the old bisection floor returned the tier
+    minimum and made the chip worse from a green gate (505 -> 775)."""
+    def price(w):
+        use = 0.5 if w is None else w      # drawn wide by a prior plan
+        return 5.0 + 20.0 / use, 5.0
+    w, why = elec.solve_width(price, 60.0, 0.5, 0.14)
+    assert w == 0.5 and "idempotent" in why
+
+
+def test_solve_width_passing_at_base_width_changes_nothing():
+    w, why = elec.solve_width(_price(5.0, 5.0), 60.0, 0.14, 0.14)
+    assert w is None and "buy nothing" in why
+
+
+def test_solve_width_bisection_honours_headroom_and_drawn_floor():
+    price = _price(5.0, 30.0)              # drawn: 5 + 214 = over 60
+    w, why = elec.solve_width(price, 60.0, 0.14, 0.14)
+    assert w is not None and w >= 0.14
+    r, _ = price(w)
+    # the solved width lands at the HEADROOM, not the budget (the
+    # round(hi, 3) can give back half a thousandth of it -- the
+    # headroom is what absorbs exactly such slop)
+    assert r <= 0.90 * 60.0 + 0.1
+    assert r < 60.0                        # and well inside the budget
+    assert "metal at" in why
+
+
+def test_solve_width_no_width_means_a_tier_not_a_guess():
+    w, why = elec.solve_width(_price(5.0, 5000.0), 60.0, 0.14, 0.14)
+    assert w is None and "thick tier" in why
+
+
+def test_solve_width_dead_band_narrowest_segment_decides():
+    """topn: the WIDEST leg at 0.370 read compliant while one 0.358
+    leg sat inside the band -- five VIAn.R.* results through a PASS."""
+    w, why = elec.solve_width(
+        _price(5.0, 5.0), 60.0, 0.37, 0.14,
+        dead_band=(0.30, 0.37), segment_widths=(0.37, 0.358))
+    assert w == 0.37 and "NOT for the budget" in why
+
+
+def test_solve_width_dead_band_raises_the_solved_width():
+    price = _price(5.0, 18.0)              # solves into the band
+    w, why = elec.solve_width(price, 60.0, 0.14, 0.14,
+                              dead_band=(0.30, 0.37))
+    assert w == 0.37 and "raised from" in why

@@ -10,15 +10,15 @@ the same seam as everything else in routekit: numbers come from a card
 accessor the caller binds, nothing is typed here, and a question the
 inputs cannot answer is a refusal.
 
-What is DELIBERATELY NOT here (recorded, not forgotten): the
-`route_widen` machinery -- corridor moves, owner-tagged reservations,
-re-claiming widened tracks in the solver's own `Tracks`. It is one unit
-with the solver's occupancy model and its regression suite is
-ROUTE_BUDGET §10's silent-pass defects; porting it without a live
-consumer exercising the loop risks an unvalidated 700-line translation.
-Its natural gate is the tsmc65 v2 re-route (plan, phase 4), and it lands
-there. Until then the fixpoint CONTRACT below is the shared piece: a
-width change is a re-solve trigger, never a local edit.
+The `route_widen` translation pass (corridor moves, owner-tagged
+reservations, stem carries) is deliberately NOT here -- and never will
+be: ROUTE_BUDGET Appendix F retired it. The router itself is
+width-aware (`solve.Tracks` takes `widths={net: um}` and prices the
+whole band), so the unit that closes the loop is PRODUCER-side:
+`solve_width` below inverts a net's R budget to the width the next
+solve routes to, `widths_settled` is the fixpoint exit, and the drawn
+rectangles never get rewritten -- "the width the maze routed to is the
+width in the GDS, and nothing in between translates anything."
 
 Two measured rules every consumer inherits:
 
@@ -136,6 +136,91 @@ def r_max_ohm(share, t_avail_ps, bits, c_load_ff):
             "not a budget".format(c_load_ff))
     tau_ln = math.log(2.0 ** (bits + 1))
     return 1000.0 * share * t_avail_ps / (tau_ln * c_load_ff)
+
+
+# ---- the budget -> width solver -----------------------------------------
+
+def solve_width(price, target_ohm, drawn_w_um, base_w_um,
+                headroom=0.90, hi_um=12.0, dead_band=None,
+                segment_widths=()):
+    """Invert a net's R budget to the width the NEXT solve routes to.
+    -> (width_um | None, why). None means "change nothing" or "no width
+    answers" -- the `why` says which.
+
+    Promoted from tsmc65's `route_budget.width_for`, signed with the
+    136-net chip; every branch below is a defect the campaign paid for
+    (ROUTE_BUDGET §10 and appendices), kept in its own words:
+
+    `price(w) -> (total_ohm, via_ohm)` prices the route at uniform
+    width `w`; `price(None)` prices it AS DRAWN. Selectivity -- which
+    segments actually widen (terminal legs never do) -- lives inside
+    the caller's `price`, because a bisection that pretends everything
+    widens under-asks (topp: solved 0.589 "meeting" 54.5 ohm, landed
+    at 70.8). `drawn_w_um` is the widest drawn segment; `base_w_um`
+    the width the router draws unwidened nets at (a pad width, not
+    the tier minimum). `dead_band = (multi_cut_gt_um, min_array_um)`
+    is the via rule's gap: a wire wider than the first forces a
+    second cut, and only from the second can the cuts stand.
+    `segment_widths` are the drawn per-segment widths, for the
+    band pre-check.
+
+    * ⛔ the via floor is a FLOOR and widening does not move it: when
+      it alone exceeds the budget the answer is cuts or a tier, and
+      "w = 12 um" would be a number that looks like an answer;
+    * ⛔ the dead band is a RULE, not a budget, and the NARROWEST
+      qualifying segment decides -- testing max(widths) reported topn
+      compliant through five VIAn.R.* results;
+    * ⭐ a passing net KEEPS the width it was routed at (idempotence on
+      a solved board) -- returning None for a net the contract widened
+      makes the loop self-destroying;
+    * ⛔ NEVER below what is drawn: the old bisection floor was the
+      tier minimum and it made vcm NARROWER from a green gate,
+      505 -> 775 ohm;
+    * ⚠ the target is not the budget: `headroom` covers the short
+      runs the price model leaves at their drawn width (without it
+      topp failed its gate by 1.5 % for a reason in a different file).
+    """
+    tot, via = price(None)
+    if via >= target_ohm:
+        return None, ("via floor %.1f ohm already exceeds the %.1f ohm "
+                      "budget -- widen nothing, add cuts or drop a tier"
+                      % (via, target_ohm))
+    if dead_band is not None:
+        lo_b, hi_b = dead_band
+        band = sorted(w for w in segment_widths
+                      if w > lo_b + 1e-9 and w < hi_b - 1e-9)
+        if band:
+            return hi_b, ("metal at %.3f um -- NOT for the budget (this "
+                          "net passes at %.1f ohm) but for the via rule: "
+                          "%d segment(s) from %.3f um are inside the band "
+                          "that forces a second cut and cannot hold one"
+                          % (hi_b, tot, len(band), band[0]))
+    if tot <= target_ohm:
+        if drawn_w_um > base_w_um + 1e-6:
+            return round(drawn_w_um, 3), (
+                "keep %.3f um -- inside budget at the width the last "
+                "plan asked for; the plan is idempotent on a solved "
+                "board" % drawn_w_um)
+        return None, ("already inside budget at the drawn width -- "
+                      "widening would take tracks and buy nothing")
+    lo, hi = drawn_w_um, hi_um
+    for _ in range(60):
+        mid = (lo + hi) / 2.0
+        r, _v = price(mid)
+        if r > headroom * target_ohm:
+            lo = mid
+        else:
+            hi = mid
+    if hi >= hi_um - 1e-6:
+        return None, ("no drawable width meets %.1f ohm -- this route "
+                      "needs a thick tier" % target_ohm)
+    w = round(hi, 3)
+    if dead_band is not None and w > dead_band[0] + 1e-9 and             w < dead_band[1]:
+        return dead_band[1], (
+            "metal at %.3f um -- raised from %.3f, the narrowest wire "
+            "that can carry the two cuts this width makes the deck ask "
+            "for" % (dead_band[1], w))
+    return w, "metal at %.3f um" % w
 
 
 # ---- the widen fixpoint -------------------------------------------------

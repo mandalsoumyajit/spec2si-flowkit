@@ -127,11 +127,25 @@ are deliberate: their owners push/PR on their own flow. The flowkit
    margin, min-width/min-area-legal pads, ungated-tier clean
    cluster) — and the notch probe DEGENERATED at L=4w=bar on the
    thick tiers (earlier M8/M9 notch OKs were vacuous; real now).
-5. **Phase 4 — three live consumers, all unblocked on the vendored
-   core**: the tsmc65 v2 glue re-route (this is also `route_widen`'s
-   port gate — the widen/corridor/reserve machinery deliberately waits
-   for it), the tile's remaining 23 search-box failures + 11 deferred
-   escapes (`adc_tile_signal_route.py`, cluster), and xt011's
+5. ✅ **DONE 2026-08-26 (fifth session): the phase-3 widen/elec unit —
+   and it was smaller than feared** (plan §6). Appendix F had already
+   retired the `route_widen` translation pass: the router is
+   width-aware (the band machinery rode into `solve.py` and the
+   136/136 corpus replay exercises it), so the unit was producer-side.
+   `elec.solve_width` = `route_budget.width_for` promoted with every
+   §10 guard as upstream poisons (via-floor refusal, dead band by the
+   narrowest segment, keep-what-passes, never-below-drawn, headroom);
+   tsmc65 re-pointed with a byte-identical `--json` replay and the
+   corpus replay green. One informational drift recorded in the plan
+   (topp `R_drawn_ohm` 47.82 frozen vs 48.34 today — pre-existing,
+   report-only). ⚠️ the tsmc28 vendored copy is NOT refreshed to this
+   flowkit state — task_6675958d is live in that checkout; re-vendor
+   when it lands, together with its own audit.py reconcile.
+6. **Phase 4 — three live consumers, all unblocked on the vendored
+   core**: the tsmc65 v2 glue re-route (now consuming
+   `elec.solve_width` through the re-pointed `route_budget`), the
+   tile's remaining 23 search-box failures + 11 deferred escapes
+   (`adc_tile_signal_route.py`, cluster), and xt011's
    `gen_core_route.py` built by IMPORTING routekit
    (`docs/core_routing_plan.md`'s PORT column becomes an import list).
 
