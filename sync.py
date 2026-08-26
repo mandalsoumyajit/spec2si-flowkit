@@ -131,6 +131,12 @@ FILES = [
     # with its natural gate, the tsmc65 v2 re-route (plan, phase 4).
     ("routekit/elec.py", "routekit/elec.py"),
     ("routekit/test_elec.py", "routekit/test_elec.py"),
+    # The minimal GDS writer: rectangles into named cells, for probe
+    # geometry that never lives in OA. Round-trip-gated -- the reader
+    # half refuses records it does not know, because half-read GDS
+    # has lied to these flows before.
+    ("routekit/gdsw.py", "routekit/gdsw.py"),
+    ("routekit/test_gdsw.py", "routekit/test_gdsw.py"),
 ]
 
 

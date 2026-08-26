@@ -35,6 +35,17 @@ def _rec(layer, x1, y1, x2, y2, net):
     return (layer, x1, y1, x2, y2, net)
 
 
+def _floor_g(v, grid):
+    return round(int(v / grid + 1e-9) * grid, 6)
+
+
+def _ceil_g(v, grid):
+    n = int(v / grid + 1e-9)
+    if n * grid < v - 1e-9:
+        n += 1
+    return round(n * grid, 6)
+
+
 def probes(rules, layer="M2", cut=None, grid=0.005):
     """Build the probe set for one metal layer (and optionally one cut).
 
@@ -46,22 +57,45 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
     out = []
     w = rules.min_width(layer)
     s = rules.min_space(layer)
-    le = rules.line_end_space(layer)
+    # a card that cannot answer line-end REFUSES; here that refusal is a
+    # named skip on the one probe that needs it, not a crash of the set
+    # -- and the skip is itself a phase-2 finding (tsmc28's My family
+    # carries no line_end_space_um yet).
+    try:
+        le = rules.line_end_space(layer)
+    except Exception as _le_err:                            # noqa: BLE001
+        le = None
+        le_reason = str(_le_err)
     L = max(40 * grid, 4 * w, 1.0)          # long enough to dodge min_area
+
+    # ⚠️ THE OFFLINE SPACING GATE CANNOT JUDGE A LAYER WITHOUT A
+    # LINE-END VALUE -- its inherited try/except skips the whole layer
+    # (the byte-faithful tsmc28 behaviour). The DECK can judge it, so
+    # spacing/notch probes on such a layer still stream, marked
+    # offline_unjudged with the card gap named; selfcheck skips them
+    # rather than reporting a firing that the gate structurally cannot
+    # produce. The card gap itself is the finding to fix.
+    _unj = (None if le is not None else
+            "offline spacing gate skips {}: {}".format(layer, le_reason))
 
     # -- flat spacing ------------------------------------------------
     bad_gap = max(grid, s - 2 * grid)
     out.append(dict(
         name="spacing", expect="min_space {} < {}".format(bad_gap, s),
-        layer=layer,
+        layer=layer, offline_unjudged=_unj,
         violation=[_rec(layer, 0, 0, L, w, "a"),
                    _rec(layer, 0, w + bad_gap, L, 2 * w + bad_gap, "b")],
         clean=[_rec(layer, 0, 0, L, w, "a"),
                _rec(layer, 0, w + s, L, 2 * w + s, "b")]))
 
     # -- line end ----------------------------------------------------
-    if le > s + 1e-9:
-        gap = (s + le) / 2.0            # legal flat, illegal line-end
+    if le is None:
+        out.append(dict(name="line_end", skipped=le_reason))
+    elif le > s + 1e-9:
+        # legal flat, illegal line-end -- and ON the grid, between the
+        # two rules (snap toward s so it stays under le)
+        gap = min(_floor_g((s + le) / 2.0, grid), le - grid)
+        gap = max(gap, s)
         out.append(dict(
             name="line_end", expect="line_end {} < {}".format(gap, le),
             layer=layer,
@@ -75,16 +109,30 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                                 "gap distinguishes the rules".format(layer)))
 
     # -- same-polygon notch ------------------------------------------
+    # ⚠️ THE CLEAN GAP IS THE GOVERNING RULE'S, NOT THE FLAT ONE. The
+    # bars are 4*w wide with a full-length parallel run, which on a real
+    # card can land in a wide-metal tier -- tsmc28's M2 wants 0.100
+    # there against the flat 0.05, and the first clean twin fired on it.
+    # Found by selfcheck refusing, which is the offline arm doing its
+    # job before a licence was spent.
     bar = 4 * w
+    notch_gap = s
+    try:
+        for tier in rules.wide_metal_tiers(layer):
+            if bar > tier["width_gt_um"] + 1e-9 and                     L > tier["parallel_run_gt_um"] + 1e-9:
+                notch_gap = max(notch_gap, tier["space_um"])
+    except Exception:                                       # noqa: BLE001
+        pass
     out.append(dict(
         name="notch", expect="notch {} < {}".format(bad_gap, s),
-        layer=layer,
+        layer=layer, offline_unjudged=_unj,
         violation=[_rec(layer, 0, 0, L, bar, "a"),
                    _rec(layer, 0, bar + bad_gap, L, 2 * bar + bad_gap, "a"),
                    _rec(layer, L - bar, 0, L, 2 * bar + bad_gap, "a")],
         clean=[_rec(layer, 0, 0, L, bar, "a"),
-               _rec(layer, 0, bar + s, L, 2 * bar + s, "a"),
-               _rec(layer, L - bar, 0, L, 2 * bar + s, "a")]))
+               _rec(layer, 0, bar + notch_gap, L,
+                    2 * bar + notch_gap, "a"),
+               _rec(layer, L - bar, 0, L, 2 * bar + notch_gap, "a")]))
 
     # -- min area ----------------------------------------------------
     try:
@@ -93,8 +141,12 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
         out.append(dict(name="min_area", skipped=str(e)))
         a2 = None
     if a2 is not None:
-        side_bad = max(2 * grid, ((a2 * 0.5) ** 0.5))
-        side_ok = (a2 * 4.0) ** 0.5
+        # ⚠️ ON THE GRID, IN THE SAFE DIRECTION: sqrt(area) is
+        # irrational, and an off-grid probe tests the stream, not the
+        # rule (the deck fires offgrid_* first). Floor the violation
+        # (stays under the area), ceil the clean (stays over).
+        side_bad = max(2 * grid, _floor_g((a2 * 0.5) ** 0.5, grid))
+        side_ok = _ceil_g((a2 * 4.0) ** 0.5, grid)
         out.append(dict(
             name="min_area", expect="area {:.5f} < {}".format(
                 side_bad * side_bad, a2),
@@ -222,6 +274,8 @@ def selfcheck(rules, layer="M2", cut=None, grid=0.005):
     for p in probes(rules, layer=layer, cut=cut, grid=grid):
         if "skipped" in p:
             continue
+        if p.get("offline_unjudged"):
+            continue            # streams for the deck arm; named there
         fired = _findings(rules, p, p["violation"])
         if not fired:
             out.append("PROBE {} on {}: the violation did not fire -- "
