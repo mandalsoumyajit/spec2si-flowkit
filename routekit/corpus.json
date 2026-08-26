@@ -1,0 +1,136 @@
+{
+  "_what": "Phase-0 regression corpus for routekit: the signed routing artifacts each consumer repo holds, frozen by hash, with the replay that verifies each and the result measured on 2026-08-26. The rule this corpus enforces: promotion of shared routing code NEVER changes signed geometry -- a replay must reproduce these bytes (or re-verify these gates) before and after every routekit phase.",
+  "_policy": "glue_route.json is a SOURCE artifact frozen by hash; the shared core is gated on from-scratch DETERMINISM + gates-green, never on snapshot equality. Measured 2026-08-26: two clean-slate solves byte-identical; from-scratch vs snapshot differs on 83/136 state records (was 17 on 2026-08-04).",
+  "verified": "2026-08-26",
+  "windows_note": "run every gate/replay with PYTHONUTF8=1 -- 41 xt011 gates fail under cp1252 (scripts open files without encoding='utf-8').",
+  "entries": [
+    {
+      "repo": "spec2si-tsmc65", "commit": "552ead53",
+      "artifact": "hybrid_adc/floorplan/glue_route.json",
+      "sha256": "3a933f24d520937aca15fc17f3606703745702f1d2e986ba2e9fb32052659258",
+      "role": "the signed 136-net chip glue solve (SOURCE artifact -- delete only to re-sign)",
+      "replay": "cd hybrid_adc/floorplan && PYTHONUTF8=1 python glue_route.py   # plan + offline gates on the snapshot",
+      "result_2026_08_26": "PASS -- 136 routed, 0 unrouted, 0 gate findings; audits 0/0/0"
+    },
+    {
+      "repo": "spec2si-tsmc65", "commit": "552ead53",
+      "artifact": "hybrid_adc/floorplan/route_widths.json",
+      "sha256": "a98de34b3270d2844bf0c0eaa619e580f68d0b25f4e4774f7eb760de93a71e42",
+      "role": "the settled electrical width plan (route_budget fixpoint)",
+      "replay": "consumed by glue_route.py above; regenerating it is a route_budget run against the frozen snapshot",
+      "result_2026_08_26": "consumed in the PASS above"
+    },
+    {
+      "repo": "spec2si-tsmc65", "commit": "552ead53",
+      "artifact": "hybrid_adc/floorplan/net_classes.json",
+      "sha256": "8b26570e6a810a10f24d539918b43d5f1c503fab7eaa68df347e301a38dccece",
+      "role": "the net-class contract (v1.1.0 mechanism: unmatched net = refusal) -- the mechanism routekit ports",
+      "replay": "consumed by glue_route.py above",
+      "result_2026_08_26": "consumed in the PASS above"
+    },
+    {
+      "repo": "spec2si-tsmc65", "commit": "552ead53",
+      "artifact": "(determinism experiment, no tracked file)",
+      "sha256": null,
+      "role": "from-scratch determinism of the solver core",
+      "replay": "in a THROWAWAY WORKTREE: rm glue_route.json; PYTHONUTF8=1 python glue_route.py --json  (x2, byte-compare)",
+      "result_2026_08_26": "DETERMINISTIC -- two clean-slate runs byte-identical, both 136/136 0-findings; 83/136 state records differ vs the grown snapshot"
+    },
+    {
+      "repo": "spec2si-xt011", "commit": "97faf4b", "signed_at": "8e238ce",
+      "artifact": "chip/floorplan/ancbrain_ring_power.route",
+      "sha256": "a49ecff7f677256a9b5ab802cdb1417dbf84065581063f08398092733ea1a225",
+      "role": "ring supply loops (revision 2, DRC density-only + LVS MATCH)",
+      "replay": "AT 8e238ce (rev 3 moved ancbrain_ring.json): PYTHONUTF8=1 python chip/floorplan/gen_ring_power_geom.py --via-card work/via_card.txt --metct-w 2.25 --thin-w 0.2 --metct-space 2.005 --met-space 0.5 --min-metct-w 1.9 --min-thin-w 0.19 --max-thin-w 1.2 --min-metct-space 2.0 --min-met-space 0.18 --grid 0.005 --out <scratch>",
+      "result_2026_08_26": "BYTE-IDENTICAL"
+    },
+    {
+      "repo": "spec2si-xt011", "commit": "97faf4b", "signed_at": "8e238ce",
+      "artifact": "chip/floorplan/ancbrain_ring_supply.route",
+      "sha256": "c4600c97d4bb53836582eea293eefb813c8a593d56d3ab59249dfc4daa6beba3",
+      "role": "loops + 126-cell taps (accumulative superset of _power)",
+      "replay": "gen_ring_taps.py --power-route ... ; needs the streamed GDS for gds_reach -- CLUSTER item, not yet replayed",
+      "result_2026_08_26": "hash frozen; replay pending on cluster"
+    },
+    {
+      "repo": "spec2si-xt011", "commit": "97faf4b", "signed_at": "8e238ce",
+      "artifact": "chip/floorplan/ancbrain_ring_layout.route",
+      "sha256": "ca4ce64bdeb4cfefb9a9a8a4d2addaecb048c84930007ccfaa71f234bb684fd2",
+      "role": "supply + 647 PIN records -- the file actually drawn (LVS MATCH 2897:2897)",
+      "replay": "gen_ring_ports.py --supply-route ...",
+      "result_2026_08_26": "hash frozen"
+    },
+    {
+      "repo": "spec2si-xt011", "commit": "97faf4b", "signed_at": "8e238ce",
+      "artifact": "chip/floorplan/ancbrain_ring_supply.seed",
+      "sha256": "cf54b722addfa7f37e0a6edcea6612e5ee22e05e691266a26ef4415727de675b",
+      "role": "the gds_reach seeds that make the tap-target flood auditable",
+      "replay": "input to the taps replay above",
+      "result_2026_08_26": "hash frozen"
+    },
+    {
+      "repo": "spec2si-xt011", "commit": "97faf4b",
+      "artifact": "(offline gate suites)",
+      "sha256": null,
+      "role": "the four self-executing gate suites",
+      "replay": "PYTHONUTF8=1 python analog/cml/test_gen_route.py; chip/floorplan/test_ring_taps.py; test_ancbrain_power.py; test_core_obstacles.py",
+      "result_2026_08_26": "93/93, 26/26, 44/44, 16/16"
+    },
+    {
+      "repo": "spec2si-tsmc28", "commit": "5cec672",
+      "artifact": "chip/floorplan/adc_tile_nets.json",
+      "sha256": "72fb6c6fab4eea74c6d34716bbc1bae967e6783002f4613c461e6fa5fe392925",
+      "role": "the tile's 82-net census, 147 terminals resolved",
+      "replay": "python3 chip/floorplan/adc_tile_nets.py --report",
+      "result_2026_08_26": "hash frozen"
+    },
+    {
+      "repo": "spec2si-tsmc28", "commit": "5cec672",
+      "artifact": "chip/floorplan/adc_pin_access.json",
+      "sha256": "31c334f94a925b9433ab36eaf61b76864cc23f44d1c5ba3ae7f2827400f43628",
+      "role": "measured landing per terminal (147/147)",
+      "replay": "cluster (reads published abstracts)",
+      "result_2026_08_26": "hash frozen"
+    },
+    {
+      "repo": "spec2si-tsmc28", "commit": "5cec672",
+      "artifact": "chip/floorplan/adc_tile_obs.json",
+      "sha256": "9d82f70ee2b558c6cfb57f451159c5b01882677d30becd3b80b37271008e5dee",
+      "role": "per-tier occupancy of 30,133 abstract rectangles",
+      "replay": "cluster",
+      "result_2026_08_26": "hash frozen"
+    },
+    {
+      "repo": "spec2si-tsmc28", "commit": "5cec672",
+      "artifact": "chip/floorplan/adc_tile_route.json",
+      "sha256": "58bd3eebd7d555ea8251ea6ca441a53bd2aa9b8bdf4c32b0dfeff8c1348ebf47",
+      "role": "the ohm-priced global route (12 tasks)",
+      "replay": "cluster (QRC card)",
+      "result_2026_08_26": "hash frozen"
+    },
+    {
+      "repo": "spec2si-tsmc28", "commit": "5cec672",
+      "artifact": "chip/floorplan/adc_route_plan.json",
+      "sha256": "d9bb79ff961b382e6b4281cd9ede84e7ea1b243d357e75c6b564273bcaf4f4d7",
+      "role": "the route-task census (12 tasks over 82 nets)",
+      "replay": "python3 chip/floorplan/adc_route_plan.py",
+      "result_2026_08_26": "hash frozen"
+    },
+    {
+      "repo": "spec2si-tsmc28", "commit": "5cec672",
+      "artifact": "(digest tests)",
+      "sha256": null,
+      "role": "solver track model + DFF shape digest",
+      "replay": "python -m pytest analog/engine/layout/test_tile_tracks.py analog/engine/layout/test_netlist_route.py -q",
+      "result_2026_08_26": "7 passed"
+    },
+    {
+      "repo": "spec2si-tsmc28", "commit": null,
+      "artifact": "asic7:Documents/onr_t28/chip/floorplan/adc_tile_signal_route.{py,json}",
+      "sha256": null,
+      "role": "the tile's FIRST signal route (2026-08-25, 48/71 nets, 23 'no path within the search box', 11 escapes deferred) -- CLUSTER-ONLY, UNCOMMITTED",
+      "replay": "cluster: python3.11 chip/floorplan/adc_tile_signal_route.py --work analog/work --json ...",
+      "result_2026_08_26": "ACTION: pull back and commit before it is lost"
+    }
+  ]
+}
