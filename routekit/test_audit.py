@@ -170,6 +170,33 @@ def test_spacing_line_end_takes_the_larger_value():
     assert len(out) == 1 and "line-end" in out[0]
 
 
+def test_spacing_two_line_ends_take_the_pair_value():
+    """tsmc28's M2.S.12 class: BOTH facing edges are line-ends -> a
+    third, stricter number. 0.075 clears the flat 0.05 AND the 0.07
+    either-edge value; with a 0.08 pair value recorded it must fire --
+    and stay quiet at 0.08, and stay an either-edge case when only ONE
+    facing edge is a line-end."""
+    import copy as _copy
+    from routekit.test_card import MINI_CARD
+    from routekit import card as _card
+    c = _copy.deepcopy(MINI_CARD)
+    c["metal"]["Mxf"]["line_end_pair_space_um"] = {"value": 0.08,
+                                                  "rule": "Mx.S.12"}
+    Rp = _card.CardRules(c)
+    end_end = [_r("M2", 0, 0, 1, 0.05, "a"),
+               _r("M2", 1.075, 0, 2, 0.05, "b")]
+    assert len(audit.spacing(Rp, end_end, layers=("M2",))) == 1
+    clean = [_r("M2", 0, 0, 1, 0.05, "a"),
+             _r("M2", 1.08, 0, 2, 0.05, "b")]
+    assert audit.spacing(Rp, clean, layers=("M2",)) == []
+    end_side = [_r("M2", 0, 0, 1, 0.05, "a"),
+                _r("M2", 1.075, -1, 1.2, 1, "b")]
+    assert audit.spacing(Rp, end_side, layers=("M2",)) == []
+    # and WITHOUT the pair value the same end-end gap is legal -- the
+    # negative control that proves the new number is doing the work
+    assert audit.spacing(R, end_end, layers=("M2",)) == []
+
+
 def test_spacing_ref_vs_ref_is_not_ours():
     ref = [_r("M2", 0, 0, 1, 0.2, "a"), _r("M2", 0, 0.22, 1, 0.5, "b")]
     assert audit.spacing(R, [], ref=ref, layers=("M2",)) == []

@@ -186,6 +186,18 @@ class CardRules(object):
         fam, e = self._metal(layer)
         return _num(e, "line_end_space_um", "metal." + fam)
 
+    def line_end_pair_space(self, layer):
+        """Space when BOTH facing edges are line-ends (tsmc28's M2.S.12
+        class, 'space OF two line-ends' vs S.7's 'space TO a
+        line-end'). OPTIONAL: an ABSENT key is an answer -- the kit
+        records no distinct pair rule and the gate falls back to
+        `line_end_space` -- while a recorded-but-null entry refuses,
+        exactly the `via_enclosure_for` contract one seam over."""
+        fam, e = self._metal(layer)
+        if "line_end_pair_space_um" not in e:
+            return None
+        return _num(e, "line_end_pair_space_um", "metal." + fam)
+
     def wide_metal_tiers(self, layer):
         fam, e = self._metal(layer)
         tiers = _need(e, "wide_metal_space_tiers", "metal." + fam)

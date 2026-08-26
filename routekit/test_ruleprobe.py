@@ -38,6 +38,24 @@ def test_a_skipped_probe_states_its_reason():
     assert sk and "skipped" in sk[0]
 
 
+def test_line_end_clean_twin_clears_the_pair_value():
+    """The clean twin is an end-to-end pair, so it must clear the whole
+    line-end family -- at S.7's value alone the tsmc28 deck drew one
+    M2.S.12 on it. With a pair value recorded, the clean gap is the
+    governing max and the selfcheck stays green."""
+    import copy
+    c = copy.deepcopy(MINI_CARD)
+    c["metal"]["Mxf"]["line_end_pair_space_um"] = {"value": 0.08,
+                                                  "rule": "Mx.S.12"}
+    Rp = card.CardRules(c)
+    ps = ruleprobe.probes(Rp, layer="M2")
+    le = [p for p in ps if p["name"] == "line_end" and "skipped" not in p]
+    assert le, ps
+    a, b = le[0]["clean"][0], le[0]["clean"][1]
+    assert abs((b[1] - a[3]) - 0.08) < 1e-9, (a, b)   # governing gap
+    assert ruleprobe.selfcheck(Rp, layer="M2") == []
+
+
 def test_every_probe_coordinate_is_on_the_grid():
     """The tsmc65 arm's G.1 finding: 1.8 * 0.090 = 0.162 is off the
     0.005 grid, and the deck fired G.1 in BOTH cells -- after a licence

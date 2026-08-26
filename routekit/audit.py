@@ -926,6 +926,18 @@ def spacing(rules, rec, ref=(), layers=("M1", "M2", "M3"), min_space=None,
         try:
             need = min_space(layer)
             need_le = line_end(layer)
+            # ⚠️ TWO line-ends FACING EACH OTHER can carry a THIRD,
+            # stricter number -- tsmc28's M2.S.12 wants 0.08 where S.7
+            # ("space TO a line-end", either-edge) wants 0.07, and the
+            # golden probe's clean twin at 0.07 drew exactly one S.12.
+            # A rules object MAY expose `line_end_pair_space(layer)`
+            # -> um|None for the both-ends case; None or an absent
+            # accessor means no distinct pair rule (the previous
+            # behaviour). A REFUSAL skips the layer exactly as a
+            # refused line_end does -- an incomplete line-end model is
+            # loud, never quietly weaker.
+            _pair = getattr(rules, "line_end_pair_space", None)
+            need_pair = _pair(layer) if _pair is not None else None
         except Exception:                                   # noqa: BLE001
             continue
         led = line_end_def if line_end_def is not None else need_le
@@ -960,6 +972,9 @@ def spacing(rules, rec, ref=(), layers=("M1", "M2", "M3"), min_space=None,
                 else:
                     ea, eb = ax2 - ax1, bx2 - bx1
                 want = need_le if min(ea, eb) < led - 1e-9 else need
+                # ...the both-ends case (see the lookup above)
+                if need_pair is not None and max(ea, eb) < led - 1e-9:
+                    want = max(want, need_pair)
                 # ...and the wide-metal tier, if either shape is wide and
                 # they run parallel far enough. The run is the overlap
                 # ALONG the gap -- a gap measured in x is spanned by a

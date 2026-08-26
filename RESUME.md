@@ -59,6 +59,12 @@ are deliberate: their owners push/PR on their own flow. The flowkit
   G.4-stops-at-M7i measured and carded; clean twin density-only. The
   10 named skips in `rkprobe_expected.json` are the tsmc65 extract
   round's worklist.
+- **tsmc28 arm completed (third session): RKP_PASS 11/11** — M7/My
+  datatype-resolved and countersigned, via probes streaming on the
+  deck-read via numbers, the line-end family modelled
+  (`line_end_pair_space`), extract round done for the routing card,
+  and the wide-landing pair-construction flow finding measured and
+  flagged (task_6675958d).
 - **P_METAL_FAMILY** fixed on tsmc28 main via the freeze-first recipe
   (its chip session, commit b8a79bb); **VIAGEO** reader fixed on xt011
   byte-replay-gated at 8e238ce; **M9/VIA8** through the card with the
@@ -89,23 +95,30 @@ are deliberate: their owners push/PR on their own flow. The flowkit
    `CardRules` scalar accessor (a template merged through `load_split`
    used to answer None), and a refused `via_geometry` names BOTH via
    skips.
-3. **The M7/My deck-option investigation** (tsmc28): probes on M7 fire
-   nothing while `USER_GUIDE.M7` ×4 fires — the deck gates the My
-   regime behind options/markers a bare-metal stream lacks. ⭐ START
-   WITH THE tsmc65 ANSWER: there `USER_GUIDE.Mn` meant "forbidden
-   DATATYPE" — the deck read the thick tiers only at NEW-scheme
-   datatypes (M8=(38;40)), and the fix was the stream, not a deck
-   option. Check the tsmc28 deck's NOUSEM7/MIXED_SCHEME analogue and
-   what datatype the tile GDS carries on M7 before touching deck
-   options. Also attribute the clean twin's one stray (`M2.S.12`=1)
-   from `analog/work/rkprobe/rkprobe_clean/DRC_RES.db` coordinates and
-   refine that probe.
-4. **extract rounds** (cluster): tsmc28 — My `line_end_space_um`, M7
-   `min_area_um2`, via GDS numbers ("still to read"). tsmc65 (named by
-   its card's own refusals, `rkprobe_expected.json` skip list) —
-   line-end `Mx.S.5/S.6` triggers, the via-enclosure ACROSS minimum,
-   VIAz/VIAu cut geometry, M8/M9 min-area; the deckspace.py
-   transcription pattern is the recipe.
+3. ✅ **DONE 2026-08-26 (third session): the M7/My mystery + the
+   tsmc28 extract round — its arm is RKP_PASS, 11/11 probes incl.
+   BOTH via probes** (plan §6 phase-2 has the full record). M7 was
+   the tsmc65 datatype gating exactly (`M7i=(37;20)`; gridcard now
+   carries `{layer, datatype}` entries for M7/M8/M9 + all vias);
+   `M2.S.12` attributed by marker to the line_end clean island → the
+   line-end FAMILY is modelled upstream as the optional
+   `line_end_pair_space` accessor ("space OF two line-ends" vs S.7's
+   "space TO"); My line-end folds into flat spacing (no plain rule —
+   the sky130 precedent), M7 min-area filled. Three upstream
+   clean-twin construction defects fixed in `ruleprobe.py`, and one
+   measured FLOW finding flagged (chip task_6675958d): the deck
+   rejects 2-square pairs on wide landings at every gap in its own
+   [floor, ceiling] window except the floor (which draws VIA2.S.5);
+   only the 2x2 cluster is quiet — `routing.via` builds the rejected
+   construction (`rkpair` experiment, asic7 rkprobe/rkpair_run).
+4. **tsmc65 extract round** (cluster; named by its card's own
+   refusals, `rkprobe_expected.json` skip list): line-end `Mx.S.5/S.6`
+   to/of split (fill BOTH `line_end_space_um` and
+   `line_end_pair_space_um`, or drop the pair key if the deck has no
+   distinct rule), the via-enclosure ACROSS minimum, VIAz/VIAu cut
+   geometry, M8/M9 min-area; the deckspace.py transcription pattern is
+   the recipe, and the 28 nm deck's headers-carry-values shortcut may
+   apply to the 65 nm deck's rule bodies too.
 5. **Phase 4 — three live consumers, all unblocked on the vendored
    core**: the tsmc65 v2 glue re-route (this is also `route_widen`'s
    port gate — the widen/corridor/reserve machinery deliberately waits

@@ -100,6 +100,24 @@ def test_missing_is_a_refusal():
         raise AssertionError("a missing fact did not refuse")
 
 
+def test_line_end_pair_space_absent_none_filled_null():
+    """The optional both-ends accessor: ABSENT key answers None (no
+    distinct pair rule -- the gate falls back), a filled value answers,
+    a recorded null refuses."""
+    assert R.line_end_pair_space("M1") is None            # absent
+    c = copy.deepcopy(MINI_CARD)
+    c["metal"]["Mxf"]["line_end_pair_space_um"] = {"value": 0.08,
+                                                  "rule": "Mx.S.12"}
+    assert card.CardRules(c).line_end_pair_space("M2") == 0.08
+    c["metal"]["Mxf"]["line_end_pair_space_um"] = {"value": None}
+    try:
+        card.CardRules(c).line_end_pair_space("M2")
+    except card.CardError as e:
+        assert "line_end_pair_space_um" in str(e)
+    else:
+        raise AssertionError("a recorded-null pair value did not refuse")
+
+
 def test_an_unfilled_null_is_a_refusal_not_a_none():
     """A template's `null` (bare or annotated) merged through load_split
     must refuse like a missing key -- `card_num` alone answers None,

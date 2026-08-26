@@ -120,13 +120,29 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
         # two rules (snap toward s so it stays under le)
         gap = min(_floor_g((s + le) / 2.0, grid), le - grid)
         gap = max(gap, s)
+        # ⚠️ THE CLEAN TWIN IS AN END-TO-END PAIR, so it must clear the
+        # whole line-end FAMILY: tsmc28's clean pair at S.7's 0.07 drew
+        # exactly one M2.S.12 ("space OF two line-ends" >= 0.08) on the
+        # deck. The governing clean gap is the pair value where the
+        # card records one; the violation stays under le and fires the
+        # family either way.
+        pv = None
+        if getattr(rules, "line_end_pair_space", None) is not None:
+            try:
+                pv = rules.line_end_pair_space(layer)
+            except Exception:                               # noqa: BLE001
+                # a refused pair value skips the layer in the gate, so
+                # selfcheck goes loud on its own -- no silent weaker gap
+                pv = None
+        clean_gap = _ceil_g(le if pv is None else max(le, pv), grid)
         out.append(dict(
             name="line_end", expect="line_end {} < {}".format(gap, le),
             layer=layer,
             violation=[_rec(layer, 0, 0, L, w, "a"),
                        _rec(layer, L + gap, 0, 2 * L + gap, w, "b")],
             clean=[_rec(layer, 0, 0, L, w, "a"),
-                   _rec(layer, L + le, 0, 2 * L + le, w, "b")]))
+                   _rec(layer, L + clean_gap, 0,
+                        2 * L + clean_gap, w, "b")]))
     else:
         out.append(dict(name="line_end",
                         skipped="line_end_space <= min_space on {} -- no "
@@ -231,17 +247,43 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                     "a matching layer/cut pair".format(cut, lo)))
     else:
         big = 8 * cw
+
+        # ⚠️ A PAD MUST CLEAR ITS METAL'S OWN MIN-AREA. A cut-wide pad
+        # extended only by the enclosure is a tiny isolated island, and
+        # the tsmc28 deck answered the first via clean twin with
+        # M2.A.2 + M2.A.3 -- probing the pad's area, not the
+        # enclosure. Extend ALONG (more enclosure is legal) until the
+        # area clears, where the card answers min_area; a refusing
+        # card keeps the enclosure-only pad.
+        def _pad_ext(metal):
+            ext = e_along
+            try:
+                need = (rules.min_area(metal) / cw - cw) / 2.0
+                if need > ext:
+                    ext = _ceil_g(need, grid)
+            except Exception:                               # noqa: BLE001
+                pass
+            return ext
+
+        e_ext = _pad_ext(lo)
+        # ⚠️ AND THE UPPER METAL IS A NARROW STRAP, NOT A PLATE. An
+        # 8-cut-wide cap is WIDE metal, and redundancy needs only ONE
+        # wide side -- (M3Wide AND M2i) in the deck's own body -- so a
+        # big cap turns the lone clean cut into a redundancy case:
+        # the tsmc28 clean twin drew VIA2.R.2 from exactly this. A
+        # cut-wide strap, run PERPENDICULAR to the lower pad like a
+        # real route, stays under every wide threshold.
+        he = _pad_ext(hi)
+        hi_v = _rec(hi, -he, 0, cw + he, cw, "a")
         out.append(dict(
             name="via_enclosure",
             expect="{} cut flush on {} -- needs {} along one axis".format(
                 cut, lo, e_along),
             layer=lo,
             violation=[_rec(cut, 0, 0, cw, cw, "a"),
-                       _rec(lo, 0, 0, cw, cw, "a"),
-                       _rec(hi, -big, -big, big, big, "a")],
+                       _rec(lo, 0, 0, cw, cw, "a"), hi_v],
             clean=[_rec(cut, 0, 0, cw, cw, "a"),
-                   _rec(lo, 0, -e_along, cw, cw + e_along, "a"),
-                   _rec(hi, -big, -big, big, big, "a")]))
+                   _rec(lo, 0, -e_ext, cw, cw + e_ext, "a"), hi_v]))
 
         # -- wide landing (lone cut) ---------------------------------
         try:
@@ -250,11 +292,12 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
             tiers = None
             out.append(dict(name="wide_landing", skipped=str(e)))
         if tiers is not None:
-            thr = None
+            thr, gov = None, None
             for t in tiers:
                 v = t.get("width_and_length_gt_um")
-                if isinstance(v, (int, float)):
-                    thr = v if thr is None else min(thr, v)
+                if isinstance(v, (int, float)) and (thr is None or
+                                                    v < thr):
+                    thr, gov = v, t
             if not tiers:
                 out.append(dict(
                     name="wide_landing",
@@ -272,6 +315,58 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                 # cut disagree in grid parity -- snap, same class as the
                 # stub width above
                 c0 = _floor_g(side / 2.0 - cw / 2.0, grid)
+                pgap = _floor_g(min(pair, side - 2 * cw), grid)
+                if pgap >= pair - 1e-9:
+                    pgap = _floor_g(pgap - grid, grid)
+                # ⚠️ THE CLEAN CLUSTER IS THE TIER'S MOST REDUNDANT
+                # SQUARE OPTION, NOT THE MINIMAL PAIR. Measured on the
+                # tsmc28 deck (rkpair experiment, marker-attributed,
+                # 2026-08-26): a 2-square pair on a wide landing fired
+                # R.2 at EVERY gap from 0.08 to its own 0.10 ceiling, a
+                # pair at the 0.07 floor cleared R.2 but drew VIA2.S.5,
+                # and the single-rectangular option fired despite being
+                # in the rule's prose -- only the 2x2 four-cut cluster
+                # was quiet. The implementation admits a far narrower
+                # construction space than the prose, which is a FLOW
+                # finding (routing.via builds space=max_space pairs);
+                # the probe's clean twin uses what the deck measurably
+                # accepts.
+                # the GOVERNING tier's own options only -- the plate
+                # side sits between this tier's threshold and the next,
+                # so a higher tier's 9-cut option is not this regime's
+                # answer (a 3x3 at pair spacing promptly drew the
+                # enclosure check on four of its cuts)
+                n_sq = 2
+                for o in ((gov.get("options") or []) if gov else []):
+                    if o.get("shape", "square") == "square" and                             isinstance(o.get("count"), int):
+                        n_sq = max(n_sq, o["count"])
+                import math
+                k = int(math.ceil(math.sqrt(n_sq)))
+                # grid of k x k cuts at pgap; grow the landing if the
+                # cluster cannot fit the wide plate
+                span = k * cw + (k - 1) * pgap
+                cside = max(side, _ceil_g(span + 2 * grid, grid))
+                cc0 = _floor_g((cside - span) / 2.0, grid)
+                cluster = []
+                placed = 0
+                for iy in range(k):
+                    for ix in range(k):
+                        if placed >= n_sq:
+                            break
+                        x0 = cc0 + ix * (cw + pgap)
+                        y0 = cc0 + iy * (cw + pgap)
+                        cluster.append(_rec(cut, x0, y0,
+                                            x0 + cw, y0 + cw, "a"))
+                        placed += 1
+                # ⚠️ BOTH CELLS CARRY THE UPPER METAL. A via with no
+                # metal above it is not a redundancy case, it is a
+                # malformed connection: the tsmc28 clean twin without
+                # it drew M3.EN.1 AND the redundancy rule itself --
+                # the deck's R.2 predicate reads the Mx/Mx+1i pair, and
+                # with no Mx+1 the intended configuration never forms.
+                cap = [_rec(hi, -big, -big, side + big, side + big, "a")]
+                ccap = [_rec(hi, -big, -big, cside + big,
+                             cside + big, "a")]
                 out.append(dict(
                     name="wide_landing",
                     expect="lone {} cut on {} x {} {}".format(
@@ -279,13 +374,10 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                     layer=lo,
                     violation=[
                         _rec(lo, 0, 0, side, side, "a"),
-                        _rec(cut, c0, c0, c0 + cw, c0 + cw, "a")],
+                        _rec(cut, c0, c0, c0 + cw, c0 + cw, "a")] + cap,
                     clean=[
-                        _rec(lo, 0, 0, side, side, "a"),
-                        _rec(cut, c0, c0, c0 + cw, c0 + cw, "a"),
-                        _rec(cut, c0, c0 + cw + min(pair, side - 2 * cw),
-                             c0 + cw,
-                             c0 + 2 * cw + min(pair, side - 2 * cw), "a")]))
+                        _rec(lo, 0, 0, cside, cside, "a")] +
+                    cluster + ccap))
     return out
 
 

@@ -142,7 +142,7 @@ digital maze with a weaker rule model than `glue_solver`, same LEF burden.
 |---|---|---|
 | 0 ✅ | Freeze + characterize: corpus in `routekit/corpus.json`; snapshot-vs-scratch policy fixed | every signed artifact replays / verifies — DONE 2026-08-26, see §6 |
 | 1 ✅ | Extract `geom` + `audit` (tsmc28's `audit.py` the base) into routekit; consumers re-point through shims; ADR-0002 records the seam extension | existing route tests green on vendored copies; `sync.py --check-all` clean — DONE 2026-08-26, see §6 |
-| 2 ◕ | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) — core shipped 2026-08-26 (see §6); arms DONE on sky130 (Pegasus), tsmc28 Mx (Calibre 5/5) and tsmc65 (Calibre RKP_PASS, all four families, 2026-08-26); remaining: the tsmc28 M7/My deck-option investigation, the value-fix rounds (`P_METAL_FAMILY` landed on tsmc28 main) and both extract rounds, recipes recorded |
+| 2 ◕ | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) — core shipped 2026-08-26 (see §6); arms RKP_PASS on sky130 (Pegasus), tsmc28 (Calibre, 11/11 incl. via probes and M7/My — the "deck options" were thick-tier DATATYPE gating, resolved) and tsmc65 (Calibre, all four families); the value-fix rounds landed (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) and the tsmc28 extract round is done for the routing card; remaining: the tsmc65 extract round (line-end S.5/S.6 to/of split, via-enclosure ACROSS, VIAz/VIAu geometry, M8/M9 min-area) and a schema slot for rule APPLICABILITY (the measured-absent `min_edge_rule` consumer key) |
 | 3 ◕ | Promote the solver + the widen/elec unit; delete the tsmc28 byte-copy | tsmc65 replays the frozen corpus; tsmc28 digests green; inter-repo diff = adapters only — solver promoted + both repos re-pointed 2026-08-26 (see §6); the widen/elec unit remains |
 | 4 | Three live consumers: tsmc65 v2 glue re-route; finish the tsmc28 tile (48/71 → all, then the 11 escapes when ports exist); xt011 `gen_core_route.py` as an import | each routes on the vendored core, audits green, signoff diff clean vs frozen baseline; no new solver file anywhere |
 | 5 | Down the stack: legality M3→M1 one regime at a time (rule-probe negative controls); block-level pilot — one NEW cell per node, zero hand route tables; current map lands; retire duplicates (freeze `rengine/`, collapse xt011's via tables onto the card) | a new cell routes DRC/LVS-clean per node; EM floors trace to computed currents; one via-map definition per repo |
@@ -204,7 +204,39 @@ upstream gates green. What remains of phase 2:
   GDS numbers still unmeasured. The four offline refusals it took to
   get there (wide-tier notch gap, named line-end skip, off-grid
   sqrt(area), layer-qualified G.4) each fired before a licence was
-  spent. **tsmc65 DONE — binding, card and arm in one pass, RKP_PASS
+  spent. **ALL FOUR FINDINGS RESOLVED 2026-08-26 (second session) and
+  the full arm is RKP_PASS — 11/11 probes on M2 (six spacing-family
+  rules incl. S.12/S.13, A.2+A.3, G.4:M2i, and BOTH via probes) and
+  M7/My (S.1/S.2, A.1, G.4:M7i), clean twin density-only.** What each
+  finding turned out to be: (1) the "M7 deck options" were the SAME
+  thick-tier DATATYPE gating tsmc65 measured — `M7i = (37;20)`, dt 0
+  is NOUSEM7; the gridcard's `gds_layers` now records `{layer,
+  datatype}` entries (M7/M8/M9 = dt 20/40/60, VIA6/7/8 = 20/40/60,
+  read off the deck's LAYER MAP lines) and the streamer streams them;
+  (2) `M2.S.12` attributed by marker coordinate to the line_end CLEAN
+  island: the deck's line-end is a FAMILY — S.7 "space TO a line-end"
+  vs S.12 "space OF two line-ends" 0.01 stricter — modelled upstream
+  as the optional `line_end_pair_space` accessor (audit gate applies
+  it only when BOTH facing edges are line-ends; absent accessor/None =
+  prior behaviour; tsmc28's binding answers it, the PLL pin-site
+  consumer keeps the S.7 semantics it depends on); (3) My line-end:
+  the deck has NO plain line-end rule for My — recorded as
+  min_space-governs (the sky130 precedent), which turns the offline
+  spacing gate ON for M7; M7 min-area filled (A.1 header). The via
+  probes then found THREE upstream clean-twin construction defects
+  (pad under its own min-area; a cap plate WIDE enough to make the
+  lone clean cut a redundancy case; cluster options taken from the
+  wrong tier) — each fixed in `ruleprobe.py` — and one measured FLOW
+  finding: **the deck's R.2 implementation rejects 2-square pairs on
+  wide landings at EVERY gap in [0.08, 0.10] (its own prose ceiling),
+  accepts the 0.07-floor pair only at the price of VIA2.S.5, fires on
+  the single-rectangular option, and is quiet only on the 2x2
+  cluster** (the `rkpair` experiment GDS, marker-attributed, one
+  licence). `routing.via` builds `space = max_space` pairs, i.e. the
+  rejected construction — flagged to the owner (chip task_6675958d);
+  the probe's clean twin now draws the governing tier's most-redundant
+  square option. The tsmc28 extract round is thereby DONE for the
+  routing card. **tsmc65 DONE — binding, card and arm in one pass, RKP_PASS
   (Calibre, asic7, 2026-08-26): all FOUR rule families** (M1, Mx, Mz,
   Mu — this stack's ladders genuinely differ, measured). The binding is
   the OTHER designed path: no `tech/process` module exists there, so
