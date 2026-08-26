@@ -151,6 +151,26 @@ shared; the local halves are not.
 Next: the web and PDF backends hang off `docmodel.py` alongside `mdbackend.py`,
 so a manual cannot drift from the repo it documents.
 
+## Studies
+
+[`docs/runlog_first_analysis.md`](docs/runlog_first_analysis.md) — first pass
+over the agent-loop runlog, **343 attempts across tsmc28/tsmc65/xt011**, which
+is why it sits here rather than in any one of them. Measures the claim the log
+was built to test (*"~10 offline iterations for zero cluster runs"*) at **6.25
+offline iterations per cluster round trip** for analog work — the first time
+that number has come from anything but memory — and records what had to be
+fixed before it meant anything: a cluster-hint substring carrying 110 of 162
+tags, an "attempt" being a *turn* where a round trip spans a mean of 2.0, and
+`offline` being a fallback rather than a detection. Also the finding that cost
+data: **the session transcripts are not durable** (30-day retention), so the
+committed log is the only record past a month.
+
+⚠️ The tool it analyses, `browse/runlog.py`, still lives in **spec2si-tsmc65**
+and serves the other repos through `RUNLOG_REPO` — the same cross-repo shape
+`housekeeping/` had before it was vendored. It has not moved because it
+imports `agentview` from the same directory, so the two travel together or
+not at all.
+
 ## Licence
 
 **Apache-2.0** — see [LICENSE](LICENSE).
