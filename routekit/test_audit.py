@@ -272,3 +272,17 @@ def test_via_plates_cut_on_the_plate_is_not_this_rule():
     rec = [_r("M2", 0, 0, 1, 1, "p"),
            _r("VIA1", 0.5, 0.5, 0.55, 0.55, "p")]
     assert audit.via_plates(R, rec) == []
+
+
+def test_via_enclosure_per_layer_override_governs_that_metal_only():
+    class OverrideRules(StubRules):
+        def via_enclosure_for(self, cut, metal):
+            return (0.3, 0.3) if metal == "M2" else None
+    # covered to the TIER's enclosure on both metals: clean without the
+    # override, and the M2 side alone fails once M2 wants 0.3
+    rec = [_r("VIA1", 0, 0, 0.05, 0.05, "a"),
+           _r("M1", 0, -0.05, 0.05, 0.10, "a"),
+           _r("M2", 0, -0.05, 0.05, 0.10, "a")]
+    assert audit.via_enclosure(R, rec) == []
+    out = audit.via_enclosure(OverrideRules(), rec)
+    assert len(out) == 1 and "VIA1:M2" in out[0]

@@ -189,3 +189,13 @@ def test_validate_per_layer_poison_empty_sections():
 def test_validate_names_a_wrong_kind_instead_of_judging_it():
     out = card.validate({"em": {"met1": {}}, "provenance": {}})
     assert len(out) == 1 and out[0].startswith("NOT-A-ROUTING-CARD")
+
+
+def test_card_via_enclosure_override():
+    c = copy.deepcopy(MINI_CARD)
+    c["via"]["VIAx"]["enclosure"]["overrides"] = {
+        "M9": {"along_um": 0.3, "across_um": 0.3,
+               "rule": "M9.EN.1", "verified": "measured on the tile"}}
+    r = card.CardRules(c)
+    assert r.via_enclosure_for("VIA1", "M9") == (0.3, 0.3)
+    assert r.via_enclosure_for("VIA1", "M2") is None

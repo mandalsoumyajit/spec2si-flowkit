@@ -8,7 +8,26 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 os.pardir))
+import pytest                                              # noqa: E402
+
 from routekit import solve                                 # noqa: E402
+
+#: ⚠️⚠️ bind() SETS LIVE MODULE STATE, AND A TEST THAT LEAVES A STUB BOUND
+#: POISONS EVERY LATER CONSUMER IN THE SAME PROCESS. Measured: with this
+#: file collected before a consumer's tracks test, the stub's pitches
+#: replaced the process's and four tracks assertions failed -- and the
+#: reverse order passed, which is the worst kind of green. Every test here
+#: restores the pre-test bind, so suite order cannot matter.
+_BOUND = ("ca", "bd", "BASE", "_TILE_VIA", "PAD", "CUT", "PAD_ALONG",
+          "LAND_TAPER", "VIA_COST", "ROUTE_TIERS", "HERE")
+
+
+@pytest.fixture(autouse=True)
+def _restore_bind():
+    saved = dict((k, getattr(solve, k)) for k in _BOUND)
+    yield
+    for k, v in saved.items():
+        setattr(solve, k, v)
 
 
 class StubCA(object):

@@ -456,6 +456,19 @@ def via_enclosure(rules, rec, ref=(), cut_layers=ALL_CUTS, via_met=None):
             continue
         _cut, e_along, e_across = rules.via_geometry(cut_layer)
         for metal in pair:
+            # ⚠️ A LAYER'S ENCLOSURE CAN DIFFER FROM ITS TIER'S. tsmc28
+            # measured M9-over-VIA8 needing 0.300 where the tier says
+            # 0.080 (2 blocking M9.EN.1 on the tile's first build). A
+            # rules object MAY expose `via_enclosure_for(cut, metal)`
+            # returning a per-layer (along, across) override or None;
+            # absent accessor or None means the tier's own pair -- the
+            # exact previous behaviour.
+            _ov = getattr(rules, "via_enclosure_for", None)
+            _pair_enc = _ov(cut_layer, metal) if _ov is not None else None
+            if _pair_enc is not None:
+                m_along, m_across = _pair_enc
+            else:
+                m_along, m_across = e_along, e_across
             sh = [q for q in allsh if q[0] == metal]
             for c in cuts:
                 cover = [(q[1], q[2], q[3], q[4]) for q in sh
@@ -465,7 +478,7 @@ def via_enclosure(rules, rec, ref=(), cut_layers=ALL_CUTS, via_met=None):
                 if not cover:
                     continue                  # undeclared instance metal
                 worst = None
-                for ex, ey in ((e_along, e_across), (e_across, e_along)):
+                for ex, ey in ((m_along, m_across), (m_across, m_along)):
                     need = (c[1] - ex, c[2] - ey, c[3] + ex, c[4] + ey)
                     left = _uncovered(need, cover)
                     if not left:

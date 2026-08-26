@@ -219,6 +219,18 @@ class CardRules(object):
         _tier, e = self._via(cut)
         return (e.get("enclosure") or {}).get("crowded")
 
+    def via_enclosure_for(self, cut, metal):
+        """A per-LAYER enclosure override, or None for the tier's own
+        pair. The schema home for the measured M9-over-VIA8 class: a
+        layer whose enclosure requirement differs from its tier's is
+        recorded under `enclosure.overrides.<layer>`."""
+        _tier, e = self._via(cut)
+        ov = (e.get("enclosure") or {}).get("overrides") or {}
+        if metal not in ov:
+            return None
+        m = ov[metal]
+        return (card_num(m.get("along_um")), card_num(m.get("across_um")))
+
     def via_redundancy_tiers(self, tier):
         via = _need(self._c, "via", "card root")
         if tier not in via:
