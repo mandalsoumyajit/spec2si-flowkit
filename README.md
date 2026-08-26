@@ -48,6 +48,7 @@ hash-gated — 132 checks on every `sync.py --check-all`.
 | **The IR solver** | `irdrop/solver.py`, `irdrop/currents.py` + their tests | Ohms and amps in, volts out. A Spectre oppoint is a *simulator* format, not a PDK one |
 | **The routing core (phase 1)** | `routekit/geom.py`, `routekit/audit.py` + their tests | Rectangles in, findings out. Every process fact arrives through a `rules` object the consumer binds; a missing fact is a refusal, never a default. See [ADR-0002](docs/decisions/0002-routekit-vendored-core.md) and [the plan](docs/routekit_plan.md) |
 | **The card contract (phase 2)** | `routekit/card.py`, `routekit/ruleprobe.py` + their tests | Load/validate/bind a RoutingCard — families by membership lists only, missing-vs-measured-absent kept apart, NDA split supported — and card-driven rule probes self-checked against the audit engine. [Schema](docs/routekit_card_schema.md) |
+| **The housekeeper** | `housekeeping/run_features.py`, `housekeeping/stale_classify.py`, `housekeeping/attic_sweep.sh` | Mtimes and filenames in, `KEEP`/`SWEEP` out. One shared NFS home holds every node's trees, so what may be forgotten is not any one port's question. Features, decision and mover are kept apart so the decision can be *measured* rather than asserted — age alone was a one-feature classifier nobody had validated. [Reference](docs/housekeeping.md) |
 
 Everything here is **stdlib-only and never imports the code it documents or
 analyses**. That is load-bearing: it is why the freshness gate and the
