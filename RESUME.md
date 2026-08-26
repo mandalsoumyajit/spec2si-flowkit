@@ -141,13 +141,21 @@ are deliberate: their owners push/PR on their own flow. The flowkit
    report-only). ⚠️ the tsmc28 vendored copy is NOT refreshed to this
    flowkit state — task_6675958d is live in that checkout; re-vendor
    when it lands, together with its own audit.py reconcile.
-6. **Phase 4 — three live consumers, all unblocked on the vendored
-   core**: the tsmc65 v2 glue re-route (now consuming
-   `elec.solve_width` through the re-pointed `route_budget`), the
-   tile's remaining 23 search-box failures + 11 deferred escapes
-   (`adc_tile_signal_route.py`, cluster), and xt011's
-   `gen_core_route.py` built by IMPORTING routekit
-   (`docs/core_routing_plan.md`'s PORT column becomes an import list).
+6. **Phase 4 — three live consumers** (one now well under way):
+   ◐ **the tile: 63/71 routed, 0 disconnected, 174 s (was 48/71,
+   372 s)** — the 23-fail class was three more BASE-era assumptions in
+   the core (start runway, anchored-legal tier, pin-goal arrival; plan
+   §6 has the record) + a net_probe tie-break; the remaining EIGHT
+   have named diagnoses in the artifact (port-goal legs for
+   Dout/Vrefp; the bit-7 pair; SAMP's anchored-claim co tolerance;
+   VDACn's keep-out needs an exit corridor, routes without the box;
+   net31 is real contention). The `--solo` diagnosis mode in the
+   driver is the tool for the rest. Still open: the tsmc65 v2 glue
+   re-route (consumes `elec.solve_width` via the re-pointed
+   `route_budget`; waits on the v2 floorplan) and xt011's
+   `gen_core_route.py` as an import. Owed upstream: maze-level unit
+   fixtures for the three new seams (gated today by the corpus replay
+   and the tile).
 
 ## Hazards the next session inherits (each measured this one)
 

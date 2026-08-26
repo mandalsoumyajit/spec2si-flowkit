@@ -1335,7 +1335,7 @@ class Route:
         for (t, k, lo, hi, co, sp, w) in self.claims(g, net):
             g.claim(t, k, lo, hi, net, ROUTE, co, sp, w)
 
-    def legal(self, g, net, anchors=()):
+    def legal(self, g, net, anchors=(), spans=None):
         """Re-ask the occupancy model about every claim this route makes.
 
         ⛔ THE SEARCH IS NOT THE GATE. A soft search deliberately walks through
@@ -1368,23 +1368,47 @@ class Route:
         # stands for fit the window `bounds` gives at its coordinate?
         # Anchored where it holds this net's own terminal, strict elsewhere.
         # The margin mismatch WAS the gate's whole verdict on those nets.
-        apts = {}
-        for (x, y) in anchors:
-            apts.setdefault(round(y, 4), []).append(x)
+        # ⚠️⚠️ **THE ANCHORED EXCEPTION IS PER-TERMINAL-TIER, NOT
+        # PER-BASE.** This used to read `t == BASE`, which was the whole
+        # truth at 65 nm (pin_access climbed every terminal to BASE) and
+        # the third member of that assumption's family here (after the
+        # search's start tier and its start window): an on-tier M6
+        # terminal's landing run was judged STRICTLY against the map
+        # that contains its own pin's surroundings -- the CDAC's
+        # unpublished decode-bus lines 0.16 um off the pin line -- so
+        # the route the maze found along the certified runway was
+        # refused at commit ("blocked M6 k169", 2026-08-26, the tile's
+        # 22-net class). An anchor is matched on ITS line in the
+        # claim's own phase; the window is then the anchored one, which
+        # is the question `bounds` answered when the search started
+        # there.
         for (t, k, lo, hi, co, _sp, _w) in self.claims(g, net):
             m = pad_along(t) / 2.0 + g.rule[t][1]
             p_lo, p_hi = lo + m, hi - m
-            ax = None
-            if t == BASE and co is not None:
-                for x in apts.get(round(co, 4), ()):
-                    if lo - 1e-9 <= x <= hi + 1e-9:
-                        ax = x
+            ax, aspan = None, None
+            if co is not None:
+                horiz = g.rule[t][4]
+                for (x, y) in anchors:
+                    aco = y if horiz else x
+                    aal = x if horiz else y
+                    if abs(aco - co) < 1e-4 and                             lo - 1e-9 <= aal <= hi + 1e-9:
+                        ax = aal
+                        aspan = (spans or {}).get((x, y))
                         break
             p = ax if ax is not None else (p_lo + p_hi) / 2.0
             # ⚠️ ALONG the tier, and per tier: what a run claims past its
             # end is the pad's own long extent (0.110 on M5, 1.220 on M8).
             w = g.bounds(t, (k,), p, net, False, ca.via_pad(t)[1] / 2.0,
                          anchor=ax is not None, co=co)
+            # ⚠️ THE RE-ASK IS THE SEARCH'S OWN QUESTION, and the search
+            # was granted the terminal's certified RUNWAY (`start_span`).
+            # Re-asking without it refuses at the gate the exact leg the
+            # maze was told it may draw -- the anchored window resolved
+            # and was still the collapsed point (w=51.37..51.37 against a
+            # 0.9 um claim, 2026-08-26).
+            if aspan is not None:
+                w = (aspan if w is None else
+                     (min(w[0], aspan[0]), max(w[1], aspan[1])))
             if (w is None or w[0] > p_lo + 1e-9 or p_hi > w[1] + 1e-9):
                 # name the rectangle, not just the verdict -- a bare
                 # "<obstacle>" cost three instrumentation round trips in one
@@ -1762,6 +1786,14 @@ class Maze:
         w = g.bounds(base, kk, gl.lo if gl.pin else lx, self.net,
                      self.soft, ca.via_pad(base)[1] / 2.0, anchor=gl.pin,
                      co=gl.off)
+        # ⚠️ A PIN GOAL'S SPAN IS THE CERTIFIED RUNWAY -- the same fact
+        # the start window and the legality gate honour -- and `bounds`
+        # cannot see it past a neighbour's unpublished bus line 0.16 um
+        # off the pin (the 28 nm decode row, 2026-08-26: the second-leg
+        # searches drained toward exactly these goals).
+        if gl.pin:
+            w = ((gl.lo, gl.hi) if w is None else
+                 (min(w[0], gl.lo), max(w[1], gl.hi)))
         if w is None or not (w[0] - 1e-9 <= lx <= w[1] + 1e-9):
             return None
         qx = min(max(lx, gl.lo), gl.hi)
@@ -1821,9 +1853,22 @@ class Maze:
 
     # -- the search -----------------------------------------------------
     def search(self, net, start, goals, soft=False, box=None,
-               tier_cost=None, start_tier=None):
+               tier_cost=None, start_tier=None, start_span=None):
         """-> (Route, blockers, why). `start` is (x, y) on BASE, off-grid: a
-        terminal's access point. `box` bounds where the route may wander."""
+        terminal's access point. `box` bounds where the route may wander.
+
+        `start_span` is the terminal's measured RUNWAY along its own
+        line -- the same certified fact `_goals_for` already applies to
+        the ANCHOR -- and it widens the start window past what `bounds`
+        can see. The 28 nm tile measured why that matters: a decode-bus
+        pin with neighbours at 1.2 um pitch sits inside THEIR tagged
+        halos, `bounds` collapses its window to a POINT, and a point
+        window admits no turn (a perpendicular track centre would have
+        to sit exactly on the off-grid pin) -- 22 of 23 "no path within
+        the search box" failures, at ONE expansion each, were this.
+        Running along the pin's own conductor inside the runway is
+        precisely what `pin_access` certified; None (the 65 nm corpus,
+        every stack terminal) changes nothing."""
         g = self.g
         # ⚠️⚠️ `start_tier` DEFAULTS TO `self.base`, WHICH USED TO BE THE
         # ONLY OPTION. This docstring read "start is (x, y) on BASE" and
@@ -1845,9 +1890,14 @@ class Maze:
         ks = g.index(base, a0)
         w = g.bounds(base, kk, p0, net, soft, ca.via_pad(base)[1] / 2.0,
                      anchor=True, co=a0)
-        if w is None:
+        if w is None and start_span is None:
             return None, frozenset(), ("the terminal's own access column is "
                                        "blocked on %s" % _name(base))
+        if start_span is not None:
+            # the union is contiguous (p0 lies in both), and the part
+            # beyond `bounds` is the pin's own certified conductor
+            w = (start_span if w is None else
+                 (min(w[0], start_span[0]), max(w[1], start_span[1])))
         # ⛔ THE STUB CAP -- see MAX_STUB. A wide net's whole window here is
         # what let the maze run 70 um along the pin's own off-grid line with
         # straddle-blind queries; clipped to a stub, the leg draws thin and
@@ -2185,11 +2235,13 @@ class Allocator:
             whole, blk, ok = Route(), set(), True
             for i in range(1, len(pts)):
                 goals = self._goals_for(whole if whole.runs else None, pts[0])
-                _st = self.term_tier.get(
-                    (round(pts[i][0], 4), round(pts[i][1], 4)))
+                _pk = (round(pts[i][0], 4), round(pts[i][1], 4))
+                _st = self.term_tier.get(_pk)
                 r, b, why = self.maze.search(net, pts[i], goals, soft=soft,
                                              box=box, tier_cost=tc,
-                                             start_tier=_st)
+                                             start_tier=_st,
+                                             start_span=self.term_span.get(
+                                                 _pk))
                 self.expansions += self.maze.expanded
                 if r is None:
                     last = "terminal %d of %d: %s" % (i + 1, len(pts), why)
@@ -2265,7 +2317,8 @@ class Allocator:
             # with no question asked, and the board ended with four wide nets
             # mutually illegal while every per-net verdict was "ok". One
             # acceptance criterion, both paths.
-            ok0, bad0 = r.legal(self.g, net, self.terms[net])
+            ok0, bad0 = r.legal(self.g, net, self.terms[net],
+                                spans=self.term_span)
             if ok0:
                 self.routes[net] = r
                 return True, None
@@ -2314,7 +2367,8 @@ class Allocator:
         if r2 is None:
             self._restore(snap)
             return False, "%s (displacement did not help: %s)" % (why, why3)
-        ok2, bad = r2.legal(self.g, net, self.terms[net])
+        ok2, bad = r2.legal(self.g, net, self.terms[net],
+                            spans=self.term_span)
         if not ok2:
             # ⛔ THE SEARCH IS NOT THE GATE. Re-asked of the structure itself.
             self.g.release(net)

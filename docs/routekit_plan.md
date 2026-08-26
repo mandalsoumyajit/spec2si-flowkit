@@ -398,6 +398,36 @@ this change (pre/post identical), a report field only, every width
 decision unchanged; the snapshot-freeze policy covers it. Phase 4's
 three live consumers are now the open work.
 
+**Phase 4, first consumer (2026-08-26, sixth session) — the tile at
+63/71, from 48.** The 23 "no path within the search box" failures
+split by a `--solo` diagnosis mode (each net alone on a fresh,
+fully-seeded board): 22 of 23 failed SOLO — a systematic defect, not
+congestion — and the defect was THREE MORE MEMBERS of the same
+BASE-era assumption family the driver had already named twice
+("start is (x, y) on BASE"): (1) the maze start honours `start_tier`
+but not the terminal's certified RUNWAY, so a decode-bus pin inside
+its neighbours' tagged halos got a POINT window (one expansion, no
+turn possible — a perpendicular track centre would have to sit
+exactly on the off-grid pin); (2) `legal()`'s anchored exception read
+`t == BASE`, so an on-tier terminal's landing run was judged
+strictly against the map containing its own pin's surroundings (the
+CDAC's unpublished decode-bus lines 0.16 µm off the pin line); (3)
+the pin-goal arrival re-asked `bounds` without the span the goal
+itself carries. Each fix is a None-default seam beside `start_tier`
+(`start_span`, `legal(spans=)`, the `gl.pin` union), the 65 nm corpus
+replayed green after each (136/136, 0 findings), and the consumer's
+`net_probe` gained a nearest-conductor tie-break for halo frames
+contested by two pins' grown boxes (untagged = a hard wall for BOTH
+runways). Result, measured: **63 routed / 8 failed / 0 disconnected,
+174 s wall (was 48/23, 372 s)**. The remaining eight each carry a
+named diagnosis in the artifact: `Dout[1]/[7]`/`Vrefp` (M8 port-goal
+legs), `HP[7]`/`LP[7]` (the bit-7 pair), `SAMP` (an anchored-claim co
+0.015 off its terminal — match tolerance), `VDACn` (the array
+keep-out aperture has no corridor OUT of the box; routes with the
+keep-out lifted), `net31` (real contention: evicted CLK_C cannot be
+re-placed). Owed upstream: maze-level unit fixtures — the gates for
+these three seams are the corpus replay and the tile itself.
+
 **Meanwhile, consumer-side (same day):** the sky130 card build-out
 completed ALL FOUR of its gates (cards on asic6, PCell probe on asic8,
 **Pegasus golden rule-probe on asic9** — 7 poison families fired, clean
