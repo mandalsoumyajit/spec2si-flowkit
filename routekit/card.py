@@ -261,7 +261,25 @@ def validate(card):
     """Structural findings on a resolved card, as printable strings.
 
     NOT a rule checker -- a card-shape checker: every finding is a way a
-    card has actually gone wrong. Returns [] for a conforming card."""
+    card has actually gone wrong. Returns [] for a conforming card.
+
+    Two conforming profiles exist and both are validated: the FAMILY
+    profile (`metal`/`via` sections with membership lists -- the TSMC
+    shape this module's `CardRules` binds) and the PER-LAYER profile
+    (`routing_layers`/`vias` keyed by layer name -- sky130's shape,
+    bound by its own strict `Sky130Rules`). The contract both serve is
+    the fourteen-accessor protocol; a validator that only knew one
+    shape would false-alarm on a conforming card, which is its own
+    failure mode."""
+    if "routing_layers" in card:
+        return _validate_per_layer(card)
+    if "metal" not in card and "via" not in card:
+        # a stack, device, RC, EM or density card is a different KIND
+        # with its own shape -- judging it against the routing shape
+        # reports the validator, not the card. Said out loud in the
+        # NOT-EVALUATED spirit, never silently passed.
+        return ["NOT-A-ROUTING-CARD: no metal/via or routing_layers "
+                "section -- this validator judges routing cards only"]
     out = []
     metal = card.get("metal")
     if not isinstance(metal, dict) or not metal:
@@ -304,4 +322,36 @@ def validate(card):
             out.append(
                 "CARD via.{}: redundancy_tiers not recorded -- record "
                 "[] with provenance if the kit has none".format(tier))
+    return out
+
+
+def _validate_per_layer(card):
+    """The per-layer profile: `routing_layers` and `vias` keyed by the
+    layer/cut name itself (no families). Checks the same failure
+    shapes: empty sections, entries that are not mappings, and via
+    entries recording neither a redundancy answer nor a measured
+    absence (a `global_absences` section counts as the answer)."""
+    out = []
+    layers = card.get("routing_layers")
+    if not isinstance(layers, dict) or not layers:
+        out.append("CARD no `routing_layers` section")
+        layers = {}
+    for ly in sorted(layers):
+        if not isinstance(layers[ly], dict):
+            out.append("CARD routing_layers.{} is not a mapping"
+                       .format(ly))
+    vias = card.get("vias")
+    if not isinstance(vias, dict) or not vias:
+        out.append("CARD no `vias` section")
+        vias = {}
+    absent = card.get("global_absences") or {}
+    for cut in sorted(vias):
+        e = vias[cut]
+        if not isinstance(e, dict):
+            out.append("CARD vias.{} is not a mapping".format(cut))
+            continue
+        if "redundancy_tiers" not in e and not absent:
+            out.append(
+                "CARD vias.{}: no redundancy answer -- record it per "
+                "cut or in `global_absences` with provenance".format(cut))
     return out

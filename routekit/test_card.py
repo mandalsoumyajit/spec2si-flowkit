@@ -158,3 +158,34 @@ def test_validate_poison_unrecorded_redundancy():
     del c["via"]["VIAx"]["redundancy_tiers"]
     out = card.validate(c)
     assert any("redundancy_tiers not recorded" in ln for ln in out)
+
+
+PER_LAYER_CARD = {
+    "schema": 1,
+    "routing_layers": {"met1": {"min_width_um": {"value": 0.14}},
+                       "met2": {"min_width_um": {"value": 0.14}}},
+    "vias": {"mcon": {"cut_um": {"value": 0.17}}},
+    "global_absences": {"redundancy_tiers": {"value": [],
+                                             "note": "measured absent"}},
+}
+
+
+def test_validate_accepts_the_per_layer_profile():
+    assert card.validate(PER_LAYER_CARD) == []
+
+
+def test_validate_per_layer_poison_no_redundancy_answer():
+    c = copy.deepcopy(PER_LAYER_CARD)
+    del c["global_absences"]
+    out = card.validate(c)
+    assert any("no redundancy answer" in ln for ln in out)
+
+
+def test_validate_per_layer_poison_empty_sections():
+    out = card.validate({"routing_layers": {}, "vias": {}})
+    assert len(out) == 2
+
+
+def test_validate_names_a_wrong_kind_instead_of_judging_it():
+    out = card.validate({"em": {"met1": {}}, "provenance": {}})
+    assert len(out) == 1 and out[0].startswith("NOT-A-ROUTING-CARD")
