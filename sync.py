@@ -155,6 +155,27 @@ FILES = [
     # What stays in each consumer's own deployment/: installing to ~/bin,
     # the crontab entry, and push.sh's liveness check. Those are site
     # concerns; these four files are the logic.
+    # The agent-loop runlog and the transcript reader under it. Shared for
+    # the plainest reason of all: it already served every repo, through a
+    # `RUNLOG_REPO` env var pointing at ONE checkout's `browse/runlog.py`.
+    # Every other consumer's SessionEnd hook reached across the disk into
+    # spec2si-tsmc65 -- which is how tsmc28's harvest could be dead for 18
+    # days and xt011's never work at all without either being noticed.
+    #
+    # ⚠️ THE DESTINATION IS `browse/`, NOT `runlog/`. `browse/server.py`
+    # imports `agentview` as a sibling, so the pair has to land where that
+    # import already resolves; the flowkit-side name is its own so the kit
+    # is not implying it owns the whole dashboard. Vendoring the pair also
+    # retires the cross-repo path: a consumer's hook becomes
+    # `cd <repo>/browse && python3 runlog.py harvest`, with no env var and
+    # therefore no `VAR=/unix/path` for MSYS to rewrite.
+    #
+    # Both are stdlib-only, which is this kit's bar: agentview imports
+    # json/os/time, runlog adds hashlib/re/sys and agentview.
+    ("runlog/agentview.py", "browse/agentview.py"),
+    ("runlog/runlog.py", "browse/runlog.py"),
+    ("runlog/test_agentview.py", "browse/test_agentview.py"),
+    ("runlog/test_runlog.py", "browse/test_runlog.py"),
     ("housekeeping/run_features.py", "housekeeping/run_features.py"),
     ("housekeeping/stale_classify.py", "housekeeping/stale_classify.py"),
     ("housekeeping/attic_sweep.sh", "housekeeping/attic_sweep.sh"),
