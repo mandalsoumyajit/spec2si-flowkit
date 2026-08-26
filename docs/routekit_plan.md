@@ -142,7 +142,7 @@ digital maze with a weaker rule model than `glue_solver`, same LEF burden.
 |---|---|---|
 | 0 ✅ | Freeze + characterize: corpus in `routekit/corpus.json`; snapshot-vs-scratch policy fixed | every signed artifact replays / verifies — DONE 2026-08-26, see §6 |
 | 1 ✅ | Extract `geom` + `audit` (tsmc28's `audit.py` the base) into routekit; consumers re-point through shims; ADR-0002 records the seam extension | existing route tests green on vendored copies; `sync.py --check-all` clean — DONE 2026-08-26, see §6 |
-| 2 ◐ | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) — core shipped 2026-08-26 (see §6); cluster arm + the three value-fix rounds remain, recipes recorded |
+| 2 ◕ | RoutingCard schema + probe kit; dense-layer rule kinds and EM/RC cards from day one; fix known-wrong values through the card (`P_METAL_FAMILY`, VIAGEO, `M9_VIA8`) | per-repo golden rule-probe DRC run; deliberate violations must fire (satisfies sky130 roadmap item 10) — core shipped 2026-08-26 (see §6); arms DONE on sky130 (Pegasus), tsmc28 Mx (Calibre 5/5) and tsmc65 (Calibre RKP_PASS, all four families, 2026-08-26); remaining: the tsmc28 M7/My deck-option investigation, the value-fix rounds (`P_METAL_FAMILY` landed on tsmc28 main) and both extract rounds, recipes recorded |
 | 3 ◕ | Promote the solver + the widen/elec unit; delete the tsmc28 byte-copy | tsmc65 replays the frozen corpus; tsmc28 digests green; inter-repo diff = adapters only — solver promoted + both repos re-pointed 2026-08-26 (see §6); the widen/elec unit remains |
 | 4 | Three live consumers: tsmc65 v2 glue re-route; finish the tsmc28 tile (48/71 → all, then the 11 escapes when ports exist); xt011 `gen_core_route.py` as an import | each routes on the vendored core, audits green, signoff diff clean vs frozen baseline; no new solver file anywhere |
 | 5 | Down the stack: legality M3→M1 one regime at a time (rule-probe negative controls); block-level pilot — one NEW cell per node, zero hand route tables; current map lands; retire duplicates (freeze `rengine/`, collapse xt011's via tables onto the card) | a new cell routes DRC/LVS-clean per node; EM floors trace to computed currents; one via-map definition per repo |
@@ -204,9 +204,33 @@ upstream gates green. What remains of phase 2:
   GDS numbers still unmeasured. The four offline refusals it took to
   get there (wide-tier notch gap, named line-end skip, off-grid
   sqrt(area), layer-qualified G.4) each fired before a licence was
-  spent. **tsmc65's arm needs its rules binding first** — routing.py's
-  helpers are not the fourteen-accessor protocol; the binding is the
-  named prerequisite;
+  spent. **tsmc65 DONE — binding, card and arm in one pass, RKP_PASS
+  (Calibre, asic7, 2026-08-26): all FOUR rule families** (M1, Mx, Mz,
+  Mu — this stack's ladders genuinely differ, measured). The binding is
+  the OTHER designed path: no `tech/process` module exists there, so
+  `rules65.py` binds `CardRules` over a card ASSEMBLED from in-repo
+  measurements (`routecard65.py`: the deck-transcribed spacing
+  ladder card becomes `min_space`+wide tiers with a family-identity
+  refusal; §1b widths; the bisected min-areas; the deck-read via
+  redundancy) — tracked template derived by scrubbing, values card
+  gitignored under the repo's own `*_card.json` catch-all. 12/12
+  streamed probes drew their exact per-layer families
+  (M1.S.1/S.2+A.1+G.4:M1i, the M2 twins, M8.S.1, M9.S.1), clean twin
+  density-only. Three rounds, three findings, each now load-bearing:
+  (1) `1.8*w` stub off-grid at w=0.09 → G.4/G.1 strays both cells →
+  upstream grid-snap + an on-grid guard in `ruleprobe.probes` (the
+  class is now an offline refusal); (2) **the thick tiers are
+  datatype-gated**: with `MIXED_SCHEME` commented out the deck reads M8
+  only at (38;40), M9 at (39;60), VIA7/8 at 40 — dt-0 shapes land in
+  NOUSEM8/9, draw only `USER_GUIDE.M8/M9`, and evaluate NOTHING (the
+  65 nm twin of the M7/My finding; the signed chip stream already
+  carries the NEW datatypes, so signoff was never exposed — the card's
+  `gds_layers` now records layer AND datatype); (3) **G.4 stops at
+  M7i** — no vertex rule on Mz/Mu, recorded as a measured-absent
+  `min_edge_rule` in the family entries (consumer-side key; a schema
+  slot for rule APPLICABILITY is a named follow-up). tsmc65's extract
+  round now owes: line-end S.5/S.6, the via-enclosure ACROSS minimum,
+  VIAz/VIAu geometry, M8/M9 min-area;
 - **the `P_METAL_FAMILY` round, measured and deferred.** The one-line
   fix (`P_METAL_FAMILY = dict(GRIDCARD["metal_stack"]["rule_family"])`)
   was applied and the suite measured its blast radius: **10 failures in

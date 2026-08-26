@@ -100,6 +100,41 @@ def test_missing_is_a_refusal():
         raise AssertionError("a missing fact did not refuse")
 
 
+def test_an_unfilled_null_is_a_refusal_not_a_none():
+    """A template's `null` (bare or annotated) merged through load_split
+    must refuse like a missing key -- `card_num` alone answers None,
+    which then poisons a gate's arithmetic two calls later (the 65 nm
+    binding met it on line-end first)."""
+    c = copy.deepcopy(MINI_CARD)
+    c["metal"]["Mxf"]["line_end_space_um"] = {"value": None,
+                                             "rule": "Mx.S.5"}
+    c["metal"]["M1f"]["min_width_um"] = None
+    for call, name in ((lambda r: r.line_end_space("M2"),
+                        "line_end_space_um"),
+                       (lambda r: r.min_width("M1"), "min_width_um")):
+        try:
+            call(card.CardRules(c))
+        except card.CardError as e:
+            assert name in str(e) and "not filled" in str(e)
+        else:
+            raise AssertionError("an unfilled null did not refuse")
+
+
+def test_an_unfilled_wide_tier_threshold_is_a_refusal():
+    """None reaching the spacing gate's tier loop raises OUTSIDE its
+    accessor try/except -- so the accessor itself must refuse, naming
+    the tier entry to fill."""
+    c = copy.deepcopy(MINI_CARD)
+    c["metal"]["Mxf"]["wide_metal_space_tiers"] = [
+        {"width_gt_um": None, "parallel_run_gt_um": 1.5, "space_um": 0.5}]
+    try:
+        card.CardRules(c).wide_metal_tiers("M2")
+    except card.CardError as e:
+        assert "wide_metal_space_tiers[0]" in str(e)
+    else:
+        raise AssertionError("an unfilled tier threshold did not refuse")
+
+
 def test_no_rect_cut_recorded_is_a_refusal_saying_measured_absent():
     try:
         R.via_rect_cut("VIA1")

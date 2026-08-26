@@ -98,6 +98,24 @@ def _need(entry, key, where):
     return entry[key]
 
 
+def _num(entry, key, where):
+    """A REQUIRED number: present AND filled. A tracked template records
+    an unfilled fact as `null` (bare or `{"value": null}`) so its schema
+    and rule ids stay under version control -- and a consumer that binds
+    `load_split(template, values)` merges those nulls in. `card_num`
+    alone answers None for them, which is a default wearing a card's
+    clothes: the 65 nm binding met it first (line-end recorded as an
+    annotated null flowed into the spacing gate as None). Null refuses
+    exactly as missing does, naming the same path."""
+    v = card_num(_need(entry, key, where))
+    if v is None:
+        raise CardError(
+            "{} at {} is recorded but not filled (null) -- measure it "
+            "and fill the values card (an unfilled fact is a refusal, "
+            "never a default)".format(key, where))
+    return v
+
+
 class CardRules(object):
     """The generic binding of a resolved card to `routekit.audit`'s
     `rules` protocol.
@@ -158,40 +176,48 @@ class CardRules(object):
 
     def min_width(self, layer):
         fam, e = self._metal(layer)
-        return card_num(_need(e, "min_width_um", "metal." + fam))
+        return _num(e, "min_width_um", "metal." + fam)
 
     def min_space(self, layer):
         fam, e = self._metal(layer)
-        return card_num(_need(e, "min_space_um", "metal." + fam))
+        return _num(e, "min_space_um", "metal." + fam)
 
     def line_end_space(self, layer):
         fam, e = self._metal(layer)
-        return card_num(_need(e, "line_end_space_um", "metal." + fam))
+        return _num(e, "line_end_space_um", "metal." + fam)
 
     def wide_metal_tiers(self, layer):
         fam, e = self._metal(layer)
-        return _need(e, "wide_metal_space_tiers", "metal." + fam)
+        tiers = _need(e, "wide_metal_space_tiers", "metal." + fam)
+        # a tier with an unfilled threshold poisons the spacing gate's
+        # arithmetic (None > float raises INSIDE the gate's loop, outside
+        # its accessor try) -- refuse here, naming the entry to fill
+        for i, t in enumerate(tiers):
+            for k in ("width_gt_um", "parallel_run_gt_um", "space_um"):
+                _num(t, k, "metal.{}.wide_metal_space_tiers[{}]".format(
+                    fam, i))
+        return tiers
 
     def min_area(self, layer):
         fam, e = self._metal(layer)
         if "min_area_um2" in e:
-            return card_num(e["min_area_um2"])
+            return _num(e, "min_area_um2", "metal." + fam)
         sect = self._c.get("min_area_um2") or {}
         if fam in sect:
-            return card_num(sect[fam])
+            return _num(sect, fam, "min_area_um2")
         if layer in sect:
-            return card_num(sect[layer])
+            return _num(sect, layer, "min_area_um2")
         raise CardError(
             "no min_area_um2 for {} (family {}) in the card".format(
                 layer, fam))
 
     def landing_pad(self, layer):
         fam, e = self._metal(layer)
-        return card_num(_need(e, "landing_pad_um", "metal." + fam))
+        return _num(e, "landing_pad_um", "metal." + fam)
 
     def compact_edge(self):
         sect = _need(self._c, "min_area_um2", "card root")
-        return card_num(_need(sect, "compact_edge_um", "min_area_um2"))
+        return _num(sect, "compact_edge_um", "min_area_um2")
 
     def via_tier(self, cut):
         tier, _e = self._via(cut)
@@ -199,11 +225,10 @@ class CardRules(object):
 
     def via_geometry(self, cut):
         tier, e = self._via(cut)
-        cut_um = card_num(_need(e, "cut_um", "via." + tier))
+        cut_um = _num(e, "cut_um", "via." + tier)
         enc = _need(e, "enclosure", "via." + tier)
-        along = card_num(_need(enc, "along_um", "via.%s.enclosure" % tier))
-        across = card_num(_need(enc, "across_um",
-                                "via.%s.enclosure" % tier))
+        along = _num(enc, "along_um", "via.%s.enclosure" % tier)
+        across = _num(enc, "across_um", "via.%s.enclosure" % tier)
         return (cut_um, along, across)
 
     def via_enclosure_crowded(self, cut=None):
@@ -239,7 +264,7 @@ class CardRules(object):
 
     def via_pair_space(self, cut):
         tier, e = self._via(cut)
-        return card_num(_need(e, "min_space_pair_um", "via." + tier))
+        return _num(e, "min_space_pair_um", "via." + tier)
 
     def via_rect_cut(self, cut=None):
         if cut is None:
@@ -251,7 +276,12 @@ class CardRules(object):
             raise CardError(
                 "via tier {} records no rectangular cut -- the kit has "
                 "none (measured absent)".format(tier))
-        return (card_num(rc[0]), card_num(rc[1]))
+        long_um, short_um = card_num(rc[0]), card_num(rc[1])
+        if long_um is None or short_um is None:
+            raise CardError(
+                "rect_cut_um at via.{} is recorded but not filled (null) "
+                "-- measure it and fill the values card".format(tier))
+        return (long_um, short_um)
 
     def plate_proximity_rules(self):
         via = _need(self._c, "via", "card root")

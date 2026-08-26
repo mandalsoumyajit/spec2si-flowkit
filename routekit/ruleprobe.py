@@ -46,6 +46,27 @@ def _ceil_g(v, grid):
     return round(n * grid, 6)
 
 
+def _assert_on_grid(out, grid):
+    """Refuse any probe whose geometry is off the manufacturing grid --
+    the deck fires G.1 FIRST, in the violation cell AND the clean twin,
+    and the run then scores the stream instead of the rule. Measured on
+    the tsmc65 arm (G.1:M1i x6 from a 0.162 stub) after one licence was
+    already spent; this guard makes the class an offline refusal."""
+    for p in out:
+        if "skipped" in p:
+            continue
+        for kind in ("violation", "clean"):
+            for r in p[kind]:
+                for v in r[1:5]:
+                    n = round(v / grid)
+                    if abs(n * grid - v) > 1e-9:
+                        raise ValueError(
+                            "probe {} draws off-grid coordinate {} on {}"
+                            " (grid {}) -- an off-grid probe tests the "
+                            "stream, not the rule".format(
+                                p["name"], v, r[0], grid))
+
+
 def probes(rules, layer="M2", cut=None, grid=0.005):
     """Build the probe set for one metal layer (and optionally one cut).
 
@@ -53,6 +74,9 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
         {name, expect, layer, violation: [rec..], clean: [rec..]}
     or, where the card cannot support the probe:
         {name, skipped: <reason>}
+
+    Every emitted coordinate is asserted onto `grid` before return --
+    see `_assert_on_grid`.
     """
     out = []
     w = rules.min_width(layer)
@@ -157,9 +181,14 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                    _rec(layer, 10 * L, 0, 11 * L, bar, "b")]))
 
     # -- min edge (G.4 vertex) ---------------------------------------
+    # ⚠️ THE STUB WIDTH IS SNAPPED, LIKE THE AREA SIDES ABOVE. 1.8*w is
+    # off-grid whenever w is an odd multiple of the grid -- 1.8 * 0.090
+    # (tsmc65 M1) = 0.162, and the deck answered G.1 in BOTH cells, the
+    # clean twin included. tsmc28 never saw it because 1.8 * 0.100 lands
+    # on-grid by luck. An off-grid probe tests the stream, not the rule.
     step = 2 * grid
     if step < w - 1e-9:
-        stub_w, stub_h = 1.8 * w, L
+        stub_w, stub_h = _ceil_g(1.8 * w, grid), L
         foot_h = 2 * w
         remnant = max(2 * grid, w - grid)
         out.append(dict(
@@ -178,13 +207,19 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                                 "{}".format(step, w, layer)))
 
     if cut is None:
+        _assert_on_grid(out, grid)
         return out
 
     # -- via enclosure -----------------------------------------------
     try:
         cw, e_along, e_across = rules.via_geometry(cut)
     except Exception as e:                                  # noqa: BLE001
+        # BOTH via probes need this geometry -- name both skips, or the
+        # wide-landing probe vanishes without a trace (the exact silent
+        # shrink this module's contract forbids; caught by the tsmc65
+        # arm, whose card refuses the enclosure ACROSS minimum)
         out.append(dict(name="via_enclosure", skipped=str(e)))
+        out.append(dict(name="wide_landing", skipped=str(e)))
         return out
     lo = layer                       # treat `layer` as the lower metal
     n = int(cut[3:]) if cut[3:].isdigit() else None
@@ -231,9 +266,12 @@ def probes(rules, layer="M2", cut=None, grid=0.005):
                     skipped="redundancy tiers carry no width threshold "
                             "-- ungated tier, probe not constructible"))
             else:
-                side = 2 * thr
+                side = _ceil_g(2 * thr, grid)
                 pair = rules.via_pair_space(cut)
-                c0 = side / 2.0 - cw / 2.0
+                # centred-cut arithmetic goes off-grid whenever side and
+                # cut disagree in grid parity -- snap, same class as the
+                # stub width above
+                c0 = _floor_g(side / 2.0 - cw / 2.0, grid)
                 out.append(dict(
                     name="wide_landing",
                     expect="lone {} cut on {} x {} {}".format(

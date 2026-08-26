@@ -53,6 +53,12 @@ are deliberate: their owners push/PR on their own flow. The flowkit
   (M2.S.1/2/3/7/13, A.2+A.3, G.4:M2i×4). Drivers:
   `chip/floorplan/ruleprobe_stream.py` + `ruleprobe_run.py`
   (`--score-only` re-scores without licences).
+- **tsmc65 binding + golden probe (Calibre, asic7, 2026-08-26 second
+  session): RKP_PASS, all four rule families** — `rules65.py` +
+  `routecard65.py` + ported drivers; thick-tier DATATYPE gating and
+  G.4-stops-at-M7i measured and carded; clean twin density-only. The
+  10 named skips in `rkprobe_expected.json` are the tsmc65 extract
+  round's worklist.
 - **P_METAL_FAMILY** fixed on tsmc28 main via the freeze-first recipe
   (its chip session, commit b8a79bb); **VIAGEO** reader fixed on xt011
   byte-replay-gated at 8e238ce; **M9/VIA8** through the card with the
@@ -67,21 +73,39 @@ are deliberate: their owners push/PR on their own flow. The flowkit
 1. **Owner decisions**: merge flowkit `routekit` → main (or PR it);
    push/PR the consumers' unpushed commits. Until the flowkit merge,
    `sync.py --check-all` gates against the BRANCH's files.
-2. **tsmc65 rules binding, then its probe arm.** `routing.py`'s helpers
-   are not the fourteen-accessor protocol; write the binding on the
-   tsmc28 `audit.RULES` pattern (its rules live in
-   `tsmc65_gridcard.json` + the deck), then reuse the tsmc28 probe
-   drivers with `drc_gds.py` as the Calibre entry (it takes any GDS).
+2. ✅ **DONE 2026-08-26 (second session): tsmc65 rules binding + its
+   probe arm — RKP_PASS on all four rule families** (plan §6 phase-2
+   has the full record). `rules65.py` binds `CardRules` over the
+   assembled `tsmc65_route_card` (builder `routecard65.py`, template
+   tracked, values gitignored); drivers
+   `analog/engine/layout/ruleprobe_{stream,run}.py` with `drc_gds` as
+   the Calibre entry. Three findings, all landed: the off-grid
+   `1.8*w` stub (upstream grid-snap + on-grid guard in `ruleprobe`);
+   **thick tiers are DATATYPE-gated** (M8=(38;40), M9=(39;60),
+   VIA7/8 dt 40 — dt-0 evaluates NOTHING; the signed chip already
+   streams the NEW scheme; `gds_layers` now carries datatypes);
+   **G.4 stops at M7i** (measured-absent `min_edge_rule` in the card).
+   Upstream also hardened: an annotated `null` now REFUSES in every
+   `CardRules` scalar accessor (a template merged through `load_split`
+   used to answer None), and a refused `via_geometry` names BOTH via
+   skips.
 3. **The M7/My deck-option investigation** (tsmc28): probes on M7 fire
    nothing while `USER_GUIDE.M7` ×4 fires — the deck gates the My
-   regime behind options/markers a bare-metal stream lacks. Read the
-   deck's USER_GUIDE.M7 body; do NOT trust an M7-regime offline verdict
-   until settled. Also attribute the clean twin's one stray
-   (`M2.S.12`=1) from `analog/work/rkprobe/rkprobe_clean/DRC_RES.db`
-   coordinates and refine that probe.
-4. **extract_dr round** (cluster): add My `line_end_space_um` and M7
-   `min_area_um2` to the tsmc28 values card; measure the via GDS
-   numbers (`gds_layers` "still to read") so the via probes can stream.
+   regime behind options/markers a bare-metal stream lacks. ⭐ START
+   WITH THE tsmc65 ANSWER: there `USER_GUIDE.Mn` meant "forbidden
+   DATATYPE" — the deck read the thick tiers only at NEW-scheme
+   datatypes (M8=(38;40)), and the fix was the stream, not a deck
+   option. Check the tsmc28 deck's NOUSEM7/MIXED_SCHEME analogue and
+   what datatype the tile GDS carries on M7 before touching deck
+   options. Also attribute the clean twin's one stray (`M2.S.12`=1)
+   from `analog/work/rkprobe/rkprobe_clean/DRC_RES.db` coordinates and
+   refine that probe.
+4. **extract rounds** (cluster): tsmc28 — My `line_end_space_um`, M7
+   `min_area_um2`, via GDS numbers ("still to read"). tsmc65 (named by
+   its card's own refusals, `rkprobe_expected.json` skip list) —
+   line-end `Mx.S.5/S.6` triggers, the via-enclosure ACROSS minimum,
+   VIAz/VIAu cut geometry, M8/M9 min-area; the deckspace.py
+   transcription pattern is the recipe.
 5. **Phase 4 — three live consumers, all unblocked on the vendored
    core**: the tsmc65 v2 glue re-route (this is also `route_widen`'s
    port gate — the widen/corridor/reserve machinery deliberately waits
