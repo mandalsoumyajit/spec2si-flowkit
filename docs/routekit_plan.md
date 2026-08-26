@@ -170,11 +170,10 @@ digital maze with a weaker rule model than `glue_solver`, same LEF burden.
   moved), so any replay must pin 8e238ce.
 - **tsmc28 @ 5cec672:** `test_tile_tracks.py` + `test_netlist_route.py`
   — 7/7 (the DFF shape digest included).
-- **Cluster-only, uncommitted:** the tile's first signal route —
-  `asic7:Documents/onr_t28/chip/floorplan/adc_tile_signal_route.{py,json}`
-  (2026-08-25, 48/71). **Action for the owner:** pull back and commit;
-  it is one scratch-cleanup from loss, and its docstring already intends
-  the JSON to be tracked.
+- **The tile's first signal route is committed** (was cluster-only when
+  first surveyed): the driver landed via tsmc28 PR #17 with the 47/71
+  run's JSON, and commit `2718228` pulled the later 48/71 run back from
+  asic7.
 - Hashes, commits, replay commands and per-entry results:
   [`routekit/corpus.json`](../routekit/corpus.json).
 

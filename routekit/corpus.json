@@ -125,12 +125,12 @@
       "result_2026_08_26": "7 passed"
     },
     {
-      "repo": "spec2si-tsmc28", "commit": null,
-      "artifact": "asic7:Documents/onr_t28/chip/floorplan/adc_tile_signal_route.{py,json}",
+      "repo": "spec2si-tsmc28", "commit": "2718228",
+      "artifact": "chip/floorplan/adc_tile_signal_route.{py,json}",
       "sha256": null,
-      "role": "the tile's FIRST signal route (2026-08-25, 48/71 nets, 23 'no path within the search box', 11 escapes deferred) -- CLUSTER-ONLY, UNCOMMITTED",
+      "role": "the tile's FIRST signal route (2026-08-25, 48/71 nets, 23 'no path within the search box', 11 escapes deferred). The driver landed via PR #17 with the 47/71 run's JSON; commit 2718228 pulled the later 48/71 run back from asic7",
       "replay": "cluster: python3.11 chip/floorplan/adc_tile_signal_route.py --work analog/work --json ...",
-      "result_2026_08_26": "ACTION: pull back and commit before it is lost"
+      "result_2026_08_26": "COMMITTED -- was cluster-only until 2718228"
     }
   ]
 }

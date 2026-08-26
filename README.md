@@ -36,16 +36,17 @@ directories *inside* a port (see [ADR-0001](docs/decisions/0001-process-scoped-r
 
 ## What is shared
 
-Eighteen files, vendored byte-identically into all four ports and hash-gated —
-72 checks on every `sync.py --check-all`.
+Twenty-three files, vendored byte-identically into all four ports and
+hash-gated — 92 checks on every `sync.py --check-all`.
 
 | What | Files | Why it is node-agnostic |
 |---|---|---|
-| **The flow policy** | `policy/flow_policy.core.json` (v1.1.0, **18 rules**) + `conformance/test_policy_conformance.py` | Each rule is stated as a portable *principle*. The enforcement point is not shared — see below |
+| **The flow policy** | `policy/flow_policy.core.json` (v1.2.0, **19 rules**) + `conformance/test_policy_conformance.py` | Each rule is stated as a portable *principle*. The enforcement point is not shared — see below |
 | **The docmeta genre vocabulary** | `policy/docmeta.core.json` (8 genres, 5 aliases) | A genre is a **staleness contract**, and a contract shared by three repos is exactly what must not diverge. All three had adopted `docmeta` independently and drifted — 26 tracked docs carried a genre the generator rejected |
 | **The documentation model** | `docs/docmodel.py` | Frontmatter, the genre vocabulary, a static-AST API extractor, doc discovery, the link and freshness checks. A docstring is a docstring on 65 nm and on 28 nm |
 | **The Markdown backend** | `docs/mdbackend.py` | Renders what the model parsed. Three repos rendering three slightly different API pages is the same divergence, one level up |
 | **The IR solver** | `irdrop/solver.py`, `irdrop/currents.py` + their tests | Ohms and amps in, volts out. A Spectre oppoint is a *simulator* format, not a PDK one |
+| **The routing core (phase 1)** | `routekit/geom.py`, `routekit/audit.py` + their tests | Rectangles in, findings out. Every process fact arrives through a `rules` object the consumer binds; a missing fact is a refusal, never a default. See [ADR-0002](docs/decisions/0002-routekit-vendored-core.md) and [the plan](docs/routekit_plan.md) |
 
 Everything here is **stdlib-only and never imports the code it documents or
 analyses**. That is load-bearing: it is why the freshness gate and the

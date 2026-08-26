@@ -92,6 +92,20 @@ FILES = [
     ("docs/texbackend.py", "docs/texbackend.py"),
     ("docs/test_texrender.py", "docs/test_texrender.py"),
     ("docs/test_pdf.py", "docs/test_pdf.py"),
+    # The routing core, phase 1: pure geometry and the tier-1 audit engine.
+    # Shared under the same seam as the IR solver -- no PDK API, no deck, no
+    # PCell, only numbers a caller's `rules` object hands in. The proof the
+    # seam holds for routing is in the tree: tsmc28's tile_solver is
+    # tsmc65's glue_solver byte-for-byte behind a ten-symbol adapter, and it
+    # routed the 28 nm tile. Per-node rule VALUES, probes, drawers and
+    # signoff drivers stay in each consumer. Plan: docs/routekit_plan.md;
+    # decision: docs/decisions/0002-routekit-vendored-core.md; the corpus
+    # that gates every change: routekit/corpus.json (upstream only).
+    ("routekit/__init__.py", "routekit/__init__.py"),
+    ("routekit/geom.py", "routekit/geom.py"),
+    ("routekit/audit.py", "routekit/audit.py"),
+    ("routekit/test_geom.py", "routekit/test_geom.py"),
+    ("routekit/test_audit.py", "routekit/test_audit.py"),
 ]
 
 
