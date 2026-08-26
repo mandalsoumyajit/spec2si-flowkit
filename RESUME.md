@@ -153,9 +153,19 @@ are deliberate: their owners push/PR on their own flow. The flowkit
    driver is the tool for the rest. Still open: the tsmc65 v2 glue
    re-route (consumes `elec.solve_width` via the re-pointed
    `route_budget`; waits on the v2 floorplan) and xt011's
-   `gen_core_route.py` as an import — **readiness AUDITED 2026-08-26
-   (eighth session): the framework is READY; xt011's
-   `docs/core_routing_plan.md` §10 is the verdict.** Its obstacle
+   `gen_core_route.py` as an import — **readiness AUDITED and BUILD ITEM 1
+   DONE 2026-08-26 (eighth session): xt011's
+   `docs/core_routing_plan.md` §10 is the verdict, and the RoutingCard
+   + bind now EXIST** — `deckroute_xt011.py` (PVS rule blocks) →
+   `routecard_xt011.py` (card cross-checked against gen_route's signed
+   W3 cap and via_probe's measured VIAGEO — the deck derivation
+   reproduces 2.250/1.050 exactly) → `chip/floorplan/core_solver.py`
+   (ten-symbol adapter, ROUTE_TIERS MET3..MET5+METCT, PROVISIONAL
+   axis table) with 7 gates green. Named tails: the via_enclosure
+   flush-cut violation doesn't fire the offline gate on this
+   one-all-sides-floor deck (probe-arm session attributes); run the
+   binding suite SEPARATELY from routekit/ (import-time bind is live
+   state); the Pegasus golden probe arm for the card is unrun.** Its obstacle
    snapshot is rebuilt current against ring rev 3 (step 2 closed);
    the four remaining build items are named with recipes (RoutingCard
    + bind adapter — needs a deck-read round, the deckroute65 pattern;
