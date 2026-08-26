@@ -137,6 +137,29 @@ FILES = [
     # has lied to these flows before.
     ("routekit/gdsw.py", "routekit/gdsw.py"),
     ("routekit/test_gdsw.py", "routekit/test_gdsw.py"),
+    # Cluster housekeeping. Shared for the plainest possible reason: it
+    # operates on `~/Documents/*/analog/work` -- EVERY node's tree at once,
+    # on one shared NFS home. It was written in the tsmc28 checkout only
+    # because that is where the session happened to be sitting, and the
+    # motivating example is in xt011: `drc_v1`..`drc_v16`, fifteen of which
+    # were obsolete the moment the next one completed.
+    #
+    # It touches no PDK. `run_features.py` reads mtimes and filenames;
+    # `stale_classify.py` decides over those features and nothing else. The
+    # one node-shaped thing in either -- the per-tool terminal-file patterns
+    # (Calibre DRC.rep, Pegasus <cell>_drc.sum, strmout.log) -- is an
+    # argument FOR sharing rather than against it: xt011 is the Pegasus
+    # node and tsmc28 the Calibre one, and a completion test that knew only
+    # Calibre scored 97 of 468 runs complete where 254 were.
+    #
+    # What stays in each consumer's own deployment/: installing to ~/bin,
+    # the crontab entry, and push.sh's liveness check. Those are site
+    # concerns; these four files are the logic.
+    ("housekeeping/run_features.py", "housekeeping/run_features.py"),
+    ("housekeeping/stale_classify.py", "housekeeping/stale_classify.py"),
+    ("housekeeping/attic_sweep.sh", "housekeeping/attic_sweep.sh"),
+    ("housekeeping/stale_labels.sample.json",
+     "housekeeping/stale_labels.sample.json"),
 ]
 
 
