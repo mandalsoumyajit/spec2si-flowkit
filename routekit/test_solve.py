@@ -281,7 +281,19 @@ def test_a_TERMINAL_LEG_is_drawn_at_the_tier_MINIMUM_where_the_step_is_legal():
     0.100 minimum and drew 716 markers.
     """
     ca = StubCA()
+    # ⛔ OPT-IN, AND OFF BY DEFAULT: the seam changed 5 M6 rectangles of 450
+    # on the sub-ADC tile (`_land_taper` widens a leg back near every cut)
+    # and the route it perturbed came out WORSE, DRC 61 -> 81. So the
+    # DEFAULT is asserted first -- every existing consumer is unchanged.
     solve.bind(ca, StubBD(), route_tiers=(35, 36, 37, 38))
+    g0 = solve.Tracks({"tile": (10.0, 10.0), "rects": {}},
+                      span=(0.0, 0.0, 10.0, 10.0), pg={})
+    assert abs(g0.leg_w(37) - g0.rule[37][0]) < 1e-9
+    assert abs(g0.run_w(37, "n", 1.0, 2.0, off=3.33)
+               - g0.rule[37][0]) < 1e-9
+
+    solve.bind(ca, StubBD(), route_tiers=(35, 36, 37, 38),
+               leg_min_width=(37, 38))
     g = solve.Tracks({"tile": (10.0, 10.0), "rects": {}},
                      span=(0.0, 0.0, 10.0, 10.0), pg={})
     # M7: pad 0.520 against a 0.100 minimum -- 0.520 >= 3 x 0.100, narrows
@@ -293,13 +305,14 @@ def test_a_TERMINAL_LEG_is_drawn_at_the_tier_MINIMUM_where_the_step_is_legal():
     assert abs(g.run_w(37, "n", 1.0, 2.0) - g.net_w(37, "n")) < 1e-9
     # M8: pad 0.520 against a 0.400 minimum -- the step would be 0.060, a jog
     assert abs(g.leg_w(38) - g.rule[38][0]) < 1e-9
-    # and an adapter with no min_width is unchanged
+    # and an adapter with no min_width is unchanged even when opted in
     saved = StubCA.min_width
     del StubCA.min_width
     try:
-        solve.bind(StubCA(), StubBD(), route_tiers=(35, 36, 37, 38))
+        solve.bind(StubCA(), StubBD(), route_tiers=(35, 36, 37, 38),
+                   leg_min_width=(37, 38))
         g2 = solve.Tracks({"tile": (10.0, 10.0), "rects": {}},
                           span=(0.0, 0.0, 10.0, 10.0), pg={})
-        assert abs(g2.leg_w(36) - g2.rule[36][0]) < 1e-9
+        assert abs(g2.leg_w(37) - g2.rule[37][0]) < 1e-9
     finally:
         StubCA.min_width = saved

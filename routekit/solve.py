@@ -93,7 +93,8 @@ CUT = None
 
 
 def bind(adapter, via_table=None, route_tiers=None, base=None,
-         pad_via=None, pad_along_um=None, here=None, grid_rule_min=None):
+         pad_via=None, pad_along_um=None, here=None, grid_rule_min=None,
+         leg_min_width=None):
     """Bind the solver to one process. MUST be called before any class or
     helper below is used; everything node-shaped is computed here and only
     here.
@@ -111,6 +112,13 @@ def bind(adapter, via_table=None, route_tiers=None, base=None,
                  the base tier's own via
     pad_along_um the measured pad bar length; defaults to the 0.380 both
                  decks measured
+    leg_min_width tiers whose off-grid TERMINAL LEG is drawn at the
+                  tier's own minimum instead of at `rule[t][0]`, which is
+                  the via pad. See `Tracks.leg_w` -- measured on the sub-ADC
+                  tile, it changes only 5 M6 rectangles of 450 because
+                  `_land_taper` widens a leg back near every cut, and the
+                  route it perturbs came out WORSE (DRC 61 -> 81). Empty,
+                  and the seam is here for the consumer that measures a gain.
     grid_rule_min tiers to pitch on the tier's own minimum width instead
                  of on `wire_w` -- see GRID_RULE_MIN. Omit for the
                  behaviour every consumer had before it existed.
@@ -118,7 +126,7 @@ def bind(adapter, via_table=None, route_tiers=None, base=None,
                  against (the body loads e.g. adc_floorplan.json beside
                  itself at 65 nm); defaults to this file's own dir
     """
-    global ca, bd, BASE, _TILE_VIA, PAD, CUT, PAD_ALONG, LAND_TAPER,         VIA_COST, ROUTE_TIERS, HERE, GRID_RULE_MIN
+    global ca, bd, BASE, _TILE_VIA, PAD, CUT, PAD_ALONG, LAND_TAPER,         VIA_COST, ROUTE_TIERS, HERE, GRID_RULE_MIN, LEG_MIN_WIDTH
     if route_tiers is None:
         raise ValueError("bind() requires route_tiers -- the tier list is "
                          "a per-chip decision, never a default")
@@ -135,6 +143,7 @@ def bind(adapter, via_table=None, route_tiers=None, base=None,
     VIA_COST = round(6 * PAD, 4)
     ROUTE_TIERS = tuple(route_tiers)
     GRID_RULE_MIN = frozenset(grid_rule_min or ())
+    LEG_MIN_WIDTH = frozenset(leg_min_width or ())
     if here is not None:
         HERE = here            # the consumer dir file loads anchor to
 
@@ -317,6 +326,12 @@ ROUTE_TIERS = None                 # supplied by bind()
 #: both widths. M7/M8 are inflated and EMPTY, so narrowing them buys
 #: capacity nobody is short of and costs the analog nets their ohms.
 GRID_RULE_MIN = frozenset()
+
+#: ⚠️ Tiers whose off-grid TERMINAL LEG is drawn at the tier's own MINIMUM
+#: rather than at `rule[t][0]` (the via pad). Supplied by
+#: `bind(leg_min_width=...)`; empty means every consumer draws what it always
+#: did. See `Tracks.leg_w` for what it is FOR and what it measured.
+LEG_MIN_WIDTH = frozenset()
 
 
 def wire_w(t):
@@ -723,10 +738,23 @@ class Tracks:
 
         ⚠️ An adapter without `min_width` keeps `rule[t][0]` exactly, so a
         consumer that does not offer it is unchanged.
+
+        ⛔⛔ **OPT-IN, AND THE MEASUREMENT IS WHY.** On the sub-ADC tile it
+        changes 5 M6 rectangles of 450 -- `_land_taper` widens a leg back to
+        the via-capable width near every cut, so almost no leg stays thin --
+        and the route it perturbs came out WORSE: DRC 61 -> 81, with the M6
+        spacing class it was aimed at unmoved (S.13 10 -> 12, S.2 10 -> 12).
+        The reasoning stands and the geometry does not follow it here, so
+        the seam ships switched OFF, exactly as `GRID_RULE_MIN` did.
+        ▶ A consumer whose terminal legs are NOT taper-widened is the one
+        this is for.
         """
         v = self._legw.get(t)
         if v is None:
             v = w = self.rule[t][0]
+            if t not in LEG_MIN_WIDTH:
+                self._legw[t] = v
+                return v
             # ⚠️ NO `except`. A swallowed error here would put the old
             # width back and look exactly like "this tier does not qualify",
             # which is the shape of every silent no-op this port has been
