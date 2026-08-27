@@ -458,6 +458,7 @@ class Tracks:
         self.widths = {n: float(w) for n, w in (widths or {}).items()
                        if w and float(w) > 0.0}
         self._band = {}
+        self._legw = {}
         # ⛔ THE CHIP'S OWN METAL IS NOT IN THE OBSTACLE MAP. `chip_obstacles`
         # is the BLOCKS; the power mesh, its 45 supply ladders and their links
         # are drawn by the same merge that draws these routes and appear in no
@@ -686,9 +687,55 @@ class Tracks:
         off-grid-ness is the whole test; an on-grid run is trunk whatever its
         length. Callers that know `off` pass it; extent-only callers were
         moved to `_ask_w`, which reads the same fact from `co`."""
-        if net is None or off is not None:
+        if net is None:
             return self.rule[t][0]
+        if off is not None:
+            return self.leg_w(t)
         return self.net_w(t, net)
+
+    def leg_w(self, t):
+        """The width a TERMINAL LEG is drawn at: the tier's own MINIMUM.
+
+        ⛔⛔ **`rule[t][0]` IS THE VIA PAD, NOT THE MINIMUM, AND A CONSUMER
+        CERTIFIED THE LANE AT THE MINIMUM.** `adc_pin_access.runway` says so
+        in its own words -- *"THE WIDTH IS THE TIER MINIMUM AND NOT THE
+        VIA-CAPABLE WIDTH ... the metal that arrives at a terminal is thin.
+        Asking at 0.160 would report a runway of zero on a tier whose
+        approach is legal at 0.050"* -- and this drew 0.160. A 3.2x
+        disagreement between the measurement and the drawing.
+
+        ▶ Measured on spec2si-tsmc28's sub-ADC tile: `cap_dac_8bit_1`
+        publishes its decode pins **0.210 um apart**, and two 0.160-wide
+        stubs landing on adjacent ones leave 0.050 where `M6.S.13` wants
+        0.080. 22 markers, and no track choice can avoid them -- the route
+        must land on those pins. At 0.050 the gap is 0.160 and `M6.S.2` does
+        not even apply, because it keys on width > 0.090.
+
+        ⚠️⚠️ **ONLY WHERE THE STEP IS ITSELF LEGAL.** A via pad standing on a
+        narrower leg steps out by `(pad - min)/2` a side, and `G.4` is
+        *"adjacent edges with length less than min. width is not allowed"* --
+        so the step must be at least the tier's minimum, which is
+        `pad >= 3 x min`. Measured per tier here: M6 0.160/0.050 and M7
+        0.400/0.100 qualify; M5 gains nothing (they are equal) and M8 would
+        step 0.060 against a 0.400 minimum, which is the jog itself. This is
+        the same rule that made a 0.360 pad on a 0.400 run 716 G.4 markers,
+        read from the other side.
+
+        ⚠️ An adapter without `min_width` keeps `rule[t][0]` exactly, so a
+        consumer that does not offer it is unchanged.
+        """
+        v = self._legw.get(t)
+        if v is None:
+            v = w = self.rule[t][0]
+            # ⚠️ NO `except`. A swallowed error here would put the old
+            # width back and look exactly like "this tier does not qualify",
+            # which is the shape of every silent no-op this port has been
+            # caught by. An adapter either offers `min_width` or it does not.
+            mw = float(ca.min_width(_name(t))) if hasattr(ca, "min_width")                 else None
+            if mw and mw > 0.0 and w >= 3.0 * mw - 1e-9:
+                v = mw
+            self._legw[t] = v
+        return v
 
     def _ask_w(self, t, net, co):
         """The width the ASKING metal of a query would draw -- `run_w`'s

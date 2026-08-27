@@ -68,11 +68,18 @@ class StubCA(object):
             return self.SPACE[name]
         return self.TIER_RULE[self.num(name)][1]
 
-    def min_space(self, t):
-        return self.TIER_RULE[t][1]
+    #: ⚠️⚠️ BY NAME, like the real adapter. `TIER_RULE`/`TIER_AXIS` are
+    #: keyed by the NUMERIC tier and `tile_abstract.min_width`,
+    #: `min_space` and `space_between` all take the tier's NAME, because
+    #: the card groups by metal family. These took a number, so a caller
+    #: could pass either and the tests would pass on a spelling that
+    #: raises `KeyError` against the real adapter -- which is what
+    #: happened the first two times `Tracks` reached for one of them.
+    def min_space(self, name):
+        return self.TIER_RULE[self.num(name)][1]
 
-    def min_width(self, t):
-        return self.TIER_RULE[t][0]
+    def min_width(self, name):
+        return self.TIER_RULE[self.num(name)][0]
 
 
 class StubBD(object):
@@ -252,3 +259,47 @@ def test_the_PITCH_carries_the_width_dependent_space_not_the_tier_minimum():
     # every other tier keeps the minimum, so the change is not a blanket one
     assert abs(g.rule[36][2] - (solve.wire_w(36)
                                 + ca.TIER_RULE[36][1])) < 1e-9
+
+
+def test_a_TERMINAL_LEG_is_drawn_at_the_tier_MINIMUM_where_the_step_is_legal():
+    """`run_w` narrows an off-grid leg to `min_width`, but only where the
+    via pad standing on it steps by at least that minimum.
+
+    ⛔ `rule[t][0]` is the VIA PAD once a tier is pitched on it, and the
+    consumer that certified the lane measured the MINIMUM:
+    `adc_pin_access.runway` -- *"the metal that arrives at a terminal is
+    thin. Asking at 0.160 would report a runway of zero on a tier whose
+    approach is legal at 0.050"*. Drawing 0.160 into a lane certified for
+    0.050 put two stubs 0.050 apart on `cap_dac_8bit_1`'s 0.210 um pin
+    pitch: 22 `M6.S.13`/`M6.S.2` markers, and no track choice avoids them
+    because the route must land on those pins.
+
+    ⚠️ AND THE GUARD IS `G.4`, READ FROM THE OTHER SIDE. *"Adjacent edges
+    with length less than min. width is not allowed"*, so a pad stepping out
+    by `(pad - min)/2` needs that step to be at least the minimum --
+    `pad >= 3 x min`. A 0.360 pad on a 0.400 M7 run steps 0.020 against a
+    0.100 minimum and drew 716 markers.
+    """
+    ca = StubCA()
+    solve.bind(ca, StubBD(), route_tiers=(35, 36, 37, 38))
+    g = solve.Tracks({"tile": (10.0, 10.0), "rects": {}},
+                     span=(0.0, 0.0, 10.0, 10.0), pg={})
+    # M7: pad 0.520 against a 0.100 minimum -- 0.520 >= 3 x 0.100, narrows
+    mw7 = ca.min_width("M7")
+    assert g.rule[37][0] > mw7 + 1e-9, "M7 must be pitched on its via pad"
+    assert abs(g.leg_w(37) - mw7) < 1e-9
+    # an OFF-GRID run asks for it; an on-grid one is trunk and does not
+    assert abs(g.run_w(37, "n", 1.0, 2.0, off=3.33) - mw7) < 1e-9
+    assert abs(g.run_w(37, "n", 1.0, 2.0) - g.net_w(37, "n")) < 1e-9
+    # M8: pad 0.520 against a 0.400 minimum -- the step would be 0.060, a jog
+    assert abs(g.leg_w(38) - g.rule[38][0]) < 1e-9
+    # and an adapter with no min_width is unchanged
+    saved = StubCA.min_width
+    del StubCA.min_width
+    try:
+        solve.bind(StubCA(), StubBD(), route_tiers=(35, 36, 37, 38))
+        g2 = solve.Tracks({"tile": (10.0, 10.0), "rects": {}},
+                          span=(0.0, 0.0, 10.0, 10.0), pg={})
+        assert abs(g2.leg_w(36) - g2.rule[36][0]) < 1e-9
+    finally:
+        StubCA.min_width = saved
