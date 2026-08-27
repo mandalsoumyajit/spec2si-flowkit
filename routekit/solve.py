@@ -2292,6 +2292,17 @@ class Allocator:
         #: arrival's last gate rejected 3892 times and passed ZERO. With the
         #: runway: 255 expansions and 0.3 s against 10442 and a failure.
         self.term_span = {}
+        #: terminal coordinate -> the along-coordinate its arrival stub must
+        #: END on. Present ONLY where `term_span` is a LANE -- a certified
+        #: runway, free of blockers, which is a licence to draw and not a
+        #: claim that anything is drawn there. Absent where the span IS
+        #: metal: a port's own published rectangle, another terminal's drawn
+        #: stub, every `run` goal, and every consumer that sets neither.
+        #: ⚠️ The distinction is not one `Goal` can make for itself, and
+        #: deriving it from the anchor cost a measured regression: a tile
+        #: PORT sits ON the die boundary, so running to its centre drew M7
+        #: at x -0.200 and `contact` refused the board outright.
+        self.term_at = {}
         self.cls = cls or {}
         self.maze = Maze(g, tiers)
         self.routes = {}              # net -> Route
@@ -2377,7 +2388,8 @@ class Allocator:
         _al = _along(self.g, _t, anchor[0], anchor[1])
         _lo, _hi = self.term_span.get(_k, (_al, _al))
         gl = [Goal("land", _t, self.g.index(_t, _ac),
-                   _lo, _hi, off=_ac, pin=True, at=_al)]
+                   _lo, _hi, off=_ac, pin=True,
+                   at=self.term_at.get(_k))]
         if route is not None:
             for (t, k, lo, hi, off) in route.runs:
                 if off is None:
