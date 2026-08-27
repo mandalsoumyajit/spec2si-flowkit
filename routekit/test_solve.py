@@ -41,6 +41,31 @@ class StubCA(object):
         return {35: (0.14, 0.11), 36: (0.14, 0.18), 37: (0.52, 0.52),
                 38: (0.52, 1.22)}[t]
 
+    #: the rest of the ten-symbol seam a `Tracks` needs -- empty answers, so
+    #: the grid it builds is a bare one and every query is about nothing
+    WIDE_RULE = (1.0, 1.0, 0.4)
+
+    def declared_boxes(self, *a, **k):
+        return set()
+
+    def rects(self, snap, t):
+        return ()
+
+    def num(self, n):
+        return {"M5": 35, "M6": 36, "M7": 37, "M8": 38}[n]
+
+    def _name(self, t):
+        return "M%d" % (t - 30)
+
+    def space_between(self, t, wa, wb=0.0, run_um=None):
+        return self.TIER_RULE[t][1]
+
+    def min_space(self, t):
+        return self.TIER_RULE[t][1]
+
+    def min_width(self, t):
+        return self.TIER_RULE[t][0]
+
 
 class StubBD(object):
     VIA = {"VIA5": (0, 0.1, 0.02, 0.25, 0),
@@ -84,3 +109,35 @@ def test_via_cost_reduces_to_the_flat_scalar_when_pads_are_flat():
     for dt in (1, 2, 3):
         assert abs(solve.via_cost(35, 35 + dt)
                    - solve.VIA_COST * dt) < 1e-12
+
+
+def test_every_occupancy_QUERY_is_callable_on_a_real_grid():
+    """`free`, `blockers` and `bounds` answer, on a Tracks built here.
+
+    ⚠️⚠️ **THIS EXISTS BECAUSE A BROKEN `free` PASSED EVERY GATE.** A patch
+    meant for `blockers` landed in `free` instead -- the two share the line
+    `w = self._ask_w(t, net, co)` and a first-occurrence replace took the
+    wrong one -- leaving `w = ... if w is None else w` in a function with no
+    `w` parameter. That is an `UnboundLocalError` on EVERY call, and it
+    survived the 98 tests here AND the signed 136-net corpus replay, because
+    neither of them ever calls `free`.
+
+    ▶ So the gate is not "is the router right", which the corpus answers.
+    It is "does each query still RUN" -- the cheapest possible check, and
+    the one whose absence let an exception-on-every-call ship.
+    """
+    saved_tiers = solve.ROUTE_TIERS
+    solve.bind(StubCA(), StubBD(), route_tiers=(35, 36, 37, 38))
+    g = solve.Tracks({"tile": (10.0, 10.0), "rects": {}},
+                     span=(0.0, 0.0, 10.0, 10.0), pg={})
+    assert solve.ROUTE_TIERS == (35, 36, 37, 38) or saved_tiers is not None
+    for t in (35, 36, 37, 38):
+        k = g.index(t, 5.0)
+        assert isinstance(g.free(t, k, 1.0, 2.0, "n"), bool)
+        hard, nets = g.blockers(t, k, 1.0, 2.0, "n")
+        assert isinstance(hard, bool)
+        # the pad-width form: a caller stating the metal it is asking about
+        hard2, _ = g.blockers(t, k, 1.0, 2.0, "n", w=solve.ca.via_pad(t)[0])
+        assert isinstance(hard2, bool)
+        w = g.bounds(t, (k,), 1.5, "n", False, 0.05)
+        assert w is None or (isinstance(w, tuple) and len(w) == 2)

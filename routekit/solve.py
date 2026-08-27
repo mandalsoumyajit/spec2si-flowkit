@@ -93,7 +93,7 @@ CUT = None
 
 
 def bind(adapter, via_table=None, route_tiers=None, base=None,
-         pad_via=None, pad_along_um=None, here=None):
+         pad_via=None, pad_along_um=None, here=None, grid_rule_min=None):
     """Bind the solver to one process. MUST be called before any class or
     helper below is used; everything node-shaped is computed here and only
     here.
@@ -111,11 +111,14 @@ def bind(adapter, via_table=None, route_tiers=None, base=None,
                  the base tier's own via
     pad_along_um the measured pad bar length; defaults to the 0.380 both
                  decks measured
+    grid_rule_min tiers to pitch on the tier's own minimum width instead
+                 of on `wire_w` -- see GRID_RULE_MIN. Omit for the
+                 behaviour every consumer had before it existed.
     here         the CONSUMER directory HERE-anchored file loads resolve
                  against (the body loads e.g. adc_floorplan.json beside
                  itself at 65 nm); defaults to this file's own dir
     """
-    global ca, bd, BASE, _TILE_VIA, PAD, CUT, PAD_ALONG, LAND_TAPER,         VIA_COST, ROUTE_TIERS, HERE
+    global ca, bd, BASE, _TILE_VIA, PAD, CUT, PAD_ALONG, LAND_TAPER,         VIA_COST, ROUTE_TIERS, HERE, GRID_RULE_MIN
     if route_tiers is None:
         raise ValueError("bind() requires route_tiers -- the tier list is "
                          "a per-chip decision, never a default")
@@ -131,6 +134,7 @@ def bind(adapter, via_table=None, route_tiers=None, base=None,
     LAND_TAPER = round(VIA_HALO + CUT / 2.0 + PAD_ALONG / 2.0, 4)
     VIA_COST = round(6 * PAD, 4)
     ROUTE_TIERS = tuple(route_tiers)
+    GRID_RULE_MIN = frozenset(grid_rule_min or ())
     if here is not None:
         HERE = here            # the consumer dir file loads anchor to
 
@@ -286,6 +290,33 @@ VIA_OF = {31: 51, 32: 52, 33: 53, 34: 54, 35: 55, 36: 56, 37: 57, 38: 58}
 #:     **fixed**: the tile's comb is drawn FIRST and handed in through
 #:     `adc_8bit_async_ms_redundant_v3.supply_pg()`.
 ROUTE_TIERS = None                 # supplied by bind()
+
+#: Tiers whose TRACK GRID is pitched on the tier's own minimum width rather
+#: than on `wire_w`. Supplied by `bind(grid_rule_min=...)`; empty means every
+#: consumer behaves exactly as it always did.
+#:
+#: ⚠️⚠️ **THE PITCH AND THE DRAWN WIDTH ARE TWO QUESTIONS AND `wire_w`
+#: ANSWERED BOTH.** Its invariant -- *"a track a via cannot land on is not a
+#: routing track"* -- is real, but it is enforceable by CLAIMING the pad
+#: rather than by pitching the whole tier to it, and `pad_tracks` already
+#: derives that claim from `ca.via_pad` independently of the run width: at a
+#: pitch below the pad it returns three tracks where it returned one.
+#:
+#: ▶ MEASURED on tsmc28's sub-ADC tile, 2026-08-26. M6 is the one tier that
+#: is both INFLATED and CONGESTED -- pad 0.160 against a 0.050 rule, and
+#: 9.9x occupancy -- so pitching it on the rule is 2.10x the tracks:
+#:
+#:     tier  min_w  via_pad  wire_w  pitch now  pitch on rule  tracks
+#:     M5    0.050    0.050   0.050      0.100          0.100   1.00x
+#:     M6    0.050    0.160   0.160      0.210          0.100   2.10x
+#:     M7    0.100    0.400   0.400      0.500          0.200   2.50x  (1.0x occ)
+#:     M8    0.400    0.520   0.520      0.920          0.800   1.15x  (1.0x occ)
+#:
+#: M5 has no inflation at all (its pad IS its minimum) -- confirmed rather
+#: than derived: `HM[7]` routes entirely on M5 and prices identically at
+#: both widths. M7/M8 are inflated and EMPTY, so narrowing them buys
+#: capacity nobody is short of and costs the analog nets their ohms.
+GRID_RULE_MIN = frozenset()
 
 
 def wire_w(t):
@@ -509,7 +540,12 @@ class Tracks:
                   round(r[3], 4)) for k, v in self._reserved.items()
                  for r in v}
         for t in self.tiers:
-            w, s = wire_w(t), ca.TIER_RULE[t][1]
+            # ⚠️ the PITCH's width, which is `wire_w`'s unless this tier
+            # was opted in -- see GRID_RULE_MIN. `net_w` still floors every
+            # net at `rule[t][0]`, so this is the tier's minimum becoming
+            # the default rather than a new kind of width.
+            w = (ca.TIER_RULE[t][0] if t in GRID_RULE_MIN else wire_w(t))
+            s = ca.TIER_RULE[t][1]
             pitch = w + s
             horiz = ca.TIER_AXIS[t] == "H"
             base = y1 if horiz else x1
@@ -862,7 +898,8 @@ class Tracks:
                 return False
         return True
 
-    def blockers(self, t, k, lo, hi, net=None, clear=None, co=None):
+    def blockers(self, t, k, lo, hi, net=None, clear=None, co=None,
+                 w=None):
         """Who is in the way over [lo, hi]. -> (hard, frozenset of nets).
 
         `hard` is True when the OBSTACLE MAP blocks -- block metal, or off the
@@ -875,6 +912,28 @@ class Tracks:
         eviction pass unnecessary for it: the router asks for the room it needs
         while it is still choosing where to go.
         """
+        # ⛔⛔ **`w` IS THE METAL BEING ASKED ABOUT, AND IT IS NOT
+        # ALWAYS THE NET'S WIRE.** A via PAD is `ca.via_pad(t)` wide, a run
+        # is `net_w` wide, and `_stack_ok` asks this about a PAD. The two
+        # were EQUAL on every tier of both decks -- `wire_w` is `max(tier
+        # minimum, one via pad)` -- so the difference could not show, and
+        # the day a tier was pitched on its rule instead (GRID_RULE_MIN) the
+        # model checked 0.050 um of metal where the router drew 0.160.
+        #
+        # ⚠️ AND AN EXPLICIT `w` KEEPS THE CALLER'S TRACK. The wide path
+        # below DISCARDS `k` and re-derives from `covers(t, co, w)` -- the
+        # tracks the metal LANDS on, right for a run whose claims are filed
+        # on exactly those. A via pad's claims are filed on `pad_tracks`,
+        # which is WIDER: at a 0.100 um pitch a 0.160 um pad lands on ONE
+        # track and conflicts with THREE. Re-deriving threw the other two
+        # away, so the claim was broadcast wider than the question was
+        # asked. A caller that passes `w` has already chosen its tracks.
+        #
+        # ⚠️ None by default IS the net's wire, so every existing caller
+        # asks exactly what it always asked.
+        if w is not None:
+            _c = self.clear_for(t, w) if clear is None else clear
+            return self._blockers1(t, k, lo, hi, net, _c, co, w)
         w = self._ask_w(t, net, co)
         if w <= self.rule[t][0] + 1e-9:
             return self._blockers1(t, k, lo, hi, net, clear, co)
@@ -1291,9 +1350,15 @@ class Route:
                     h = TERM_PADS.get((round(x, 4), round(y, 4)))
                     if h is not None:
                         m = h + g.rule[ly][1]
+                # ⚠️ AND THE CLAIM SAYS THE PAD'S WIDTH TOO. The last two
+                # fields are what this metal DEMANDS of others and how wide
+                # it is; filing the tier's wire width for a via pad tells
+                # every later query to clear 0.050 um of metal that is
+                # 0.160. Same coincidence as the query above, same fix.
+                _pw = ca.via_pad(ly)[0]
                 for kk in pad_tracks(g, ly, v):
-                    out.append((ly, kk, q - m, q + m, v, g.rule[ly][1],
-                                g.rule[ly][0]))
+                    out.append((ly, kk, q - m, q + m, v,
+                                g.clear_for(ly, _pw), _pw))
         return out
 
     def segments(self, g, net=None):
@@ -1320,6 +1385,41 @@ class Route:
                 x1, y1, x2, y2 = g.wire(t, k, a, b, off, ww)
                 out.append((round(x1, 4), round(y1, 4), round(x2, 4),
                             round(y2, 4), t))
+        # ⛔⛔ **AND A LANDING PAD WHEREVER A CUT STANDS ON METAL NARROWER
+        # THAN THE PAD.** `wire_w`'s invariant is *"a track a via cannot land
+        # on is not a routing track"*, and it held it by making EVERY run as
+        # wide as a via pad. With `GRID_RULE_MIN` a run may be the tier's
+        # minimum instead, and then the cut has no enclosure -- which is
+        # exactly why forcing the minimum without this drew a board the
+        # router called legal and routed 0 of 5 on.
+        #
+        # ⚠️ The CLAIM side already handled it: `pad_tracks` derives its
+        # conflict set from `ca.via_pad`, not from the run width, so at a
+        # pitch below the pad it claims three tracks where it claimed one.
+        # What was missing is the GEOMETRY -- the model reserved the room
+        # and nothing drew the metal in it.
+        #
+        # ⚠️ `via_pad` is (ACROSS, ALONG) and the two differ on every tier
+        # here (0.160 x 0.180 on M6), so the rectangle is oriented by the
+        # tier's own direction rather than assumed square.
+        # ⚠️ Emitted as its own rectangle rather than spliced into the run's
+        # spans: overlapping rectangles merge, and a splice would have to
+        # re-derive `_land_taper`'s windows to avoid fighting them.
+        for (a, b, x, y) in self.stacks:
+            for ly in range(a, b + 1):
+                if ly not in g.rule:
+                    continue
+                pw, pl = ca.via_pad(ly)
+                if g.net_w(ly, net) >= pw - 1e-9:
+                    continue            # the run already carries the pad
+                if g.rule[ly][4]:       # horizontal: across is y, along x
+                    r = (x - pl / 2.0, y - pw / 2.0,
+                         x + pl / 2.0, y + pw / 2.0)
+                else:                   # vertical: across is x, along y
+                    r = (x - pw / 2.0, y - pl / 2.0,
+                         x + pw / 2.0, y + pl / 2.0)
+                out.append((round(r[0], 4), round(r[1], 4),
+                            round(r[2], 4), round(r[3], 4), ly))
         return out
 
     def cuts(self):
@@ -1391,7 +1491,32 @@ class Route:
                 for (x, y) in anchors:
                     aco = y if horiz else x
                     aal = x if horiz else y
-                    if abs(aco - co) < 1e-4 and                             lo - 1e-9 <= aal <= hi + 1e-9:
+                    # ⚠️⚠️ **ON ITS LINE, AND A TERMINAL IS OFF-GRID BY
+                    # CONSTRUCTION.** The comment above says the anchor is
+                    # matched "on ITS line in the claim's own phase", and
+                    # the test was `co` equality -- which is the same thing
+                    # only when the terminal happens to sit ON a track
+                    # centre. It does not: this router's own invariant is
+                    # that *"a terminal's last run is at the PIN's own y,
+                    # off-grid, straddling two tracks"*, and `claims` gives
+                    # an ON-GRID run `co = centre(t, k)`. So the run down
+                    # the terminal's own access column was never anchored,
+                    # and was judged against the strict map that contains
+                    # the pin's own surroundings.
+                    #
+                    # Measured (tsmc28 sub-ADC tile, 2026-08-26): `SAMP`'s
+                    # claim `<blocked M5 k1033 28.13..44.17 co=103.30>` for
+                    # a terminal at x 103.285 -- 0.015 um off a 0.100 um
+                    # pitch, which IS track 1033 and nothing else.
+                    #
+                    # ▶ So the question is asked of the GRID, which is what
+                    # decided `k` in the first place. The `co` equality is
+                    # kept and OR'd, not replaced: an OFF-GRID run claims
+                    # BOTH straddled tracks at one `co`, and only one of
+                    # them is `index(aco)` -- dropping it would un-anchor
+                    # the other half of every off-grid terminal run.
+                    if (abs(aco - co) < 1e-4
+                            or g.index(t, aco) == k) and                             lo - 1e-9 <= aal <= hi + 1e-9:
                         ax = aal
                         aspan = (spans or {}).get((x, y))
                         break
@@ -1623,8 +1748,12 @@ def _stack_ok(g, a, b, x, y, net, soft):
         # that is what `pad_tracks` prices, and it is what is drawn.)
         _pa = pad_along(ly)
         lo, hi = p - _pa / 2.0, p + _pa / 2.0
+        # ⚠️ THE PAD'S WIDTH, not the net's -- `pad_tracks` already picks the
+        # tracks from `ca.via_pad`, and asking about them at the WIRE's
+        # width prices the clearance for metal that is not what is drawn.
+        _pw = ca.via_pad(ly)[0]
         for k in pad_tracks(g, ly, v):
-            hard, ns = g.blockers(ly, k, lo, hi, net, co=v)
+            hard, ns = g.blockers(ly, k, lo, hi, net, co=v, w=_pw)
             if hard:
                 return False, frozenset()
             nets |= ns
