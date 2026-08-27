@@ -143,21 +143,29 @@ def test_every_occupancy_QUERY_is_callable_on_a_real_grid():
         assert w is None or (isinstance(w, tuple) and len(w) == 2)
 
 
-def test_a_pin_goals_stub_runs_to_the_CONDUCTOR_not_to_the_lane():
-    """`_reach` draws the arrival stub to `Goal.cond`, falling back to lo..hi.
+def test_a_pin_goals_stub_runs_ONTO_THE_PIN_not_into_the_lane():
+    """`_reach` ends a pin goal's stub at `Goal.at`, the terminal itself.
 
-    ⛔⛔ **THIS IS THE GATE FOR A CHANGE THE CORPUS CANNOT SEE.** `term_cond`
-    is empty in every consumer but the sub-ADC tile, so a corpus replay is
-    byte-identical BY CONSTRUCTION -- which makes it a control that proves
-    nothing, the exact shape this project has been caught by three times.
-    What has to be shown is that the two branches DIFFER.
+    ⛔⛔ **THIS IS THE GATE FOR A CHANGE THE CORPUS CANNOT SEE.** Where a
+    caller sets no `term_span`, `lo == hi == at` and both expressions give
+    the same number, so a replay is byte-identical BY CONSTRUCTION -- which
+    makes it a control that proves nothing, the exact shape this project has
+    been caught by three times. What has to be shown is that the two
+    branches DIFFER once a span IS supplied.
 
     The defect: a pin goal's `lo..hi` is the certified RUNWAY, a lane
     measured free of blockers. `_reach` clamped the arrival into it, so a
     drop column standing anywhere inside the lane gave `qx == lx` and a stub
     of ZERO length -- the pin joined to nothing, while `contact()` reported
-    a gap of 0.0000 um because it reads the same interval. Measured on the
-    sub-ADC tile 2026-08-27: 42 of 65 on-tier pins reached by no metal.
+    a gap of 0.0000 um because it reads the same interval. Measured on
+    spec2si-tsmc28's sub-ADC tile 2026-08-27: 42 of 65 on-tier pins reached
+    by no metal.
+
+    ⚠️ AND THE CONDUCTOR'S NEAR EDGE IS NOT THE ANSWER EITHER. Stopping
+    there leaves the claim short of the anchor, so `legal`'s anchor test
+    never matches, the span is never unioned into the window, and the route
+    is refused at the gate: 69 routed became 33 on that tile. The stub has
+    to arrive ON the terminal.
     """
     solve.bind(StubCA(), StubBD(), route_tiers=(35, 36, 37, 38))
     g = solve.Tracks({"tile": (10.0, 10.0), "rects": {}},
@@ -170,9 +178,9 @@ def test_a_pin_goals_stub_runs_to_the_CONDUCTOR_not_to_the_lane():
     maze = solve.Maze(g, (35, 36, 37, 38))
     maze.net, maze.soft = "n", False
 
-    def stub_for(cond):
-        gl = solve.Goal("land", base, g.index(base, off),
-                        lx - 3.0, lx + 3.0, off=off, pin=True, cond=cond)
+    def stub_for(lo, hi, at):
+        gl = solve.Goal("land", base, g.index(base, off), lo, hi,
+                        off=off, pin=True, at=at)
         st = solve._St(st_t, g.index(st_t, lx), None, off,
                        off - 3.0, off + 3.0, 0.0, 0.0, None, None,
                        frozenset(), 0, frozenset())
@@ -181,12 +189,17 @@ def test_a_pin_goals_stub_runs_to_the_CONDUCTOR_not_to_the_lane():
         _run, _stack, stub, _blk = r
         return stub[3] - stub[2]
 
-    # the lane is 6 um wide and the riser stands in the middle of it
-    assert abs(stub_for(None)) < 1e-9, (
-        "cond=None must reproduce the old expression exactly -- that is what "
-        "keeps every existing consumer byte-identical")
-    # ...and the conductor is a 0.4 um pad 2.6 um away
-    reach = stub_for((lx - 3.0, lx - 2.6))
-    assert abs(reach - 2.6) < 1e-9, (
-        "the stub must span the lane to the conductor's near edge, got %r"
-        % reach)
+    # NO SPAN: lo == hi == at, and the old expression and the new one are
+    # the same number. This is the property every existing consumer relies
+    # on, so it is asserted rather than assumed.
+    assert abs(stub_for(lx, lx, lx)) < 1e-9
+
+    # A SPAN, and the riser standing 2.6 um along it from the terminal.
+    # The old expression clamped into the lane and drew nothing.
+    at = lx + 2.6
+    assert abs(stub_for(lx - 3.0, lx + 3.0, at) - 2.6) < 1e-9, (
+        "the stub must run from the riser onto the terminal")
+
+    # and a terminal on the other side of the riser, so the sign is tested
+    at = lx - 1.4
+    assert abs(stub_for(lx - 3.0, lx + 3.0, at) - 1.4) < 1e-9
