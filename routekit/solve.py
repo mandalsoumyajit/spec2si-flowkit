@@ -1661,12 +1661,26 @@ class Goal:
             trunk with taps -- 12 of the greedy core's 71 failures were taps.
     """
 
-    def __init__(self, kind, t, k, lo, hi, off=None, pin=False):
+    def __init__(self, kind, t, k, lo, hi, off=None, pin=False, cond=None):
         self.kind, self.t, self.k = kind, t, k
         self.lo, self.hi, self.off = lo, hi, off
         #: a TERMINAL, not a piece of drawn route. Its pad is `pin_access`'s
         #: to vouch for, not the obstacle map's -- see Tracks.bounds(anchor).
         self.pin = pin
+        #: ⛔⛔ **WHERE THE NET'S METAL ACTUALLY IS, WHICH IS NOT `lo..hi`.**
+        #: For a pin goal `lo..hi` is the certified RUNWAY -- a lane measured
+        #: FREE OF BLOCKERS, which is a licence to draw and not a claim that
+        #: anything is drawn. `_reach` used it as both and stopped the stub
+        #: at the lane's edge, so a riser landing anywhere inside the lane
+        #: drew a ZERO-LENGTH stub and the pin was joined to nothing.
+        #: Measured on the sub-ADC tile 2026-08-27: 42 of 65 on-tier pins
+        #: reached by no metal at all, with `contact()` reporting a worst gap
+        #: of 0.0000 um because it reads the same interval.
+        #: ⚠️ `None` means "lo..hi IS metal" -- true of every `run` goal and
+        #: of a goal on another terminal's drawn stub, and true of every
+        #: caller that does not set `Allocator.term_cond`. So this is inert
+        #: until someone supplies it.
+        self.cond = cond
 
 
 def _goal_point(g, gl):
@@ -1925,7 +1939,22 @@ class Maze:
                  (min(w[0], gl.lo), max(w[1], gl.hi)))
         if w is None or not (w[0] - 1e-9 <= lx <= w[1] + 1e-9):
             return None
-        qx = min(max(lx, gl.lo), gl.hi)
+        # ⛔⛔ **THE STUB RUNS TO THE CONDUCTOR, AND THE LANE IS ONLY THE
+        # LICENCE TO CROSS IT.** This read `min(max(lx, gl.lo), gl.hi)` --
+        # clamp into the RUNWAY -- so a drop column standing anywhere inside
+        # the lane produced `qx == lx` and a stub of zero length, on the
+        # premise stated at the start window: *"the part beyond `bounds` is
+        # the pin's own certified conductor"*. It is not; `runway()` measures
+        # a lane that is free of blockers, and the conductor merely lies
+        # INSIDE it. Clamping into `gl.cond` instead draws the metal the
+        # premise assumed was already there. The lane is still what makes
+        # that legal: it is free by construction.
+        # ⚠️ `cond` is None for every `run` goal, for a goal on another
+        # terminal's drawn stub, and for any caller that leaves
+        # `Allocator.term_cond` empty -- all of which DO have metal at
+        # `lo..hi`, so the fallback is the old expression exactly.
+        _c0, _c1 = gl.cond if gl.cond else (gl.lo, gl.hi)
+        qx = min(max(lx, _c0), _c1)
         if not (w[0] - 1e-9 <= qx <= w[1] + 1e-9):
             return None
         # ⛔ THE STUB CAP, goal side -- see MAX_STUB. A drop column far from
@@ -2235,6 +2264,11 @@ class Allocator:
         #: arrival's last gate rejected 3892 times and passed ZERO. With the
         #: runway: 255 expansions and 0.3 s against 10442 and a failure.
         self.term_span = {}
+        #: terminal coordinate -> (lo, hi) of the pin's own CONDUCTOR along
+        #: its tier. See `Goal.cond`: `term_span` is the lane, this is the
+        #: metal. Empty by default, and then `_reach` behaves exactly as it
+        #: did -- which is why no existing consumer moves by a single wire.
+        self.term_cond = {}
         self.cls = cls or {}
         self.maze = Maze(g, tiers)
         self.routes = {}              # net -> Route
@@ -2320,7 +2354,8 @@ class Allocator:
         _al = _along(self.g, _t, anchor[0], anchor[1])
         _lo, _hi = self.term_span.get(_k, (_al, _al))
         gl = [Goal("land", _t, self.g.index(_t, _ac),
-                   _lo, _hi, off=_ac, pin=True)]
+                   _lo, _hi, off=_ac, pin=True,
+                   cond=self.term_cond.get(_k))]
         if route is not None:
             for (t, k, lo, hi, off) in route.runs:
                 if off is None:
