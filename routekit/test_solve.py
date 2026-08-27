@@ -193,6 +193,13 @@ def test_a_pin_goals_stub_runs_ONTO_THE_PIN_not_into_the_lane():
     # the same number. This is the property every existing consumer relies
     # on, so it is asserted rather than assumed.
     assert abs(stub_for(lx, lx, lx)) < 1e-9
+    # ...INCLUDING when the riser stands well away from the terminal. A
+    # point span means "unspecified", not "a lane of zero width", so the
+    # lane guard must not fire on it -- the 65 nm corpus found exactly this
+    # regression when the guard was written without the width test.
+    far = lx + 2.6
+    assert abs(stub_for(far, far, far) - 2.6) < 1e-9, (
+        "a caller that supplies no span must be unaffected by the lane guard")
 
     # A SPAN, and the riser standing 2.6 um along it from the terminal.
     # The old expression clamped into the lane and drew nothing.

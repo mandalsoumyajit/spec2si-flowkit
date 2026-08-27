@@ -1957,8 +1957,32 @@ class Maze:
         # ⚠️ WHERE NO SPAN WAS SUPPLIED `lo == hi == at`, so both expressions
         # give `at` and the caller is unchanged BY CONSTRUCTION. That is the
         # only reason a corpus replay is allowed to be evidence here.
-        qx = (gl.at if (gl.pin and gl.at is not None)
-              else min(max(lx, gl.lo), gl.hi))
+        if gl.pin and gl.at is not None:
+            # ⛔⛔ **AND THE RISER MUST STAND INSIDE THE CERTIFIED LANE.**
+            # `bounds` is probed HERE at `gl.lo` and by `legal` at the
+            # ANCHOR, and on a pin's own tier those are two different
+            # questions about one track: at the anchor the pin's own metal
+            # and halo make it None, so the ONLY interval the gate will
+            # honour is the span. A riser outside it produces a claim the
+            # gate then refuses, which is a search that cannot be committed:
+            #     HM[6] <blocked M6 k116 105.86..114.19 co=24.49
+            #                                            w=110.05..118.05>
+            # -- eight microns of stub against a four-micron licence, and
+            # seven nets of one tile lost that way (2026-08-27). Claim only
+            # what was certified.
+            # ⚠️⚠️ **ONLY WHERE A SPAN WAS ACTUALLY SUPPLIED.** With no
+            # `term_span` the goal carries `lo == hi == at` -- a degenerate
+            # point that means "unspecified", not "a lane of zero width" --
+            # and guarding against it demands the riser stand exactly on the
+            # pin. The 65 nm corpus caught that within one replay, which is
+            # the whole reason it is run: the `qx` change above IS identical
+            # by construction there, and this one is not.
+            if (gl.hi - gl.lo > 1e-9
+                    and not (gl.lo - 1e-9 <= lx <= gl.hi + 1e-9)):
+                return None
+            qx = gl.at
+        else:
+            qx = min(max(lx, gl.lo), gl.hi)
         if not (w[0] - 1e-9 <= qx <= w[1] + 1e-9):
             return None
         # ⛔ THE STUB CAP, goal side -- see MAX_STUB. A drop column far from
