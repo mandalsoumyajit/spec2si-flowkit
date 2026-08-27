@@ -57,8 +57,16 @@ class StubCA(object):
     def _name(self, t):
         return "M%d" % (t - 30)
 
-    def space_between(self, t, wa, wb=0.0, run_um=None):
-        return self.TIER_RULE[t][1]
+    #: ⚠️ BY NAME, like the real adapter. This took the NUMERIC tier, so
+    #: `Tracks.__init__` could pass either and the tests would pass on a
+    #: call that raises against `tile_abstract` -- which is exactly what
+    #: happened when the pitch started asking for it.
+    SPACE = {}
+
+    def space_between(self, name, wa, wb=0.0, run_um=None):
+        if name in self.SPACE:
+            return self.SPACE[name]
+        return self.TIER_RULE[self.num(name)][1]
 
     def min_space(self, t):
         return self.TIER_RULE[t][1]
@@ -210,3 +218,37 @@ def test_a_pin_goals_stub_runs_ONTO_THE_PIN_not_into_the_lane():
     # and a terminal on the other side of the riser, so the sign is tested
     at = lx - 1.4
     assert abs(stub_for(lx - 3.0, lx + 3.0, at) - 1.4) < 1e-9
+
+
+def test_the_PITCH_carries_the_width_dependent_space_not_the_tier_minimum():
+    """`Tracks` pitches a tier at `space_between(name, w, w)`, not `TIER_RULE`.
+
+    ⛔ **THE TIER MINIMUM IS THE SPACE BETWEEN TWO MINIMUM-WIDTH LINES**, and
+    the width the grid is pitched at is the VIA PAD -- far above the width
+    threshold every modern spacing rule keys on. Measured against the 28 nm
+    deck on the sub-ADC tile's first DRC over drawn signal metal:
+
+        M6.S.13  space >= 0.080 above width 0.130; wire_w(M6) = 0.160,
+                 and the pitch gave 0.050                    47 markers
+        M7.S.2   space >= 0.120 above width 0.200; wire_w(M7) = 0.400,
+                 and the pitch gave 0.100                    75 markers
+
+    168 of 654, and every one is two adjacent tracks: the GRID was illegal,
+    so no amount of routing could avoid them.
+
+    ⚠️ And the call is by NAME. The stub used to take the numeric tier, so
+    both spellings passed here while only one of them works against
+    `tile_abstract`.
+    """
+    ca = StubCA()
+    ca.SPACE = {"M7": 0.25}                  # the rule for a 0.4-wide line
+    solve.bind(ca, StubBD(), route_tiers=(35, 36, 37, 38))
+    g = solve.Tracks({"tile": (10.0, 10.0), "rects": {}},
+                     span=(0.0, 0.0, 10.0, 10.0), pg={})
+    w = solve.wire_w(37)
+    assert abs(g.rule[37][2] - (w + 0.25)) < 1e-9, (
+        "M7 must be pitched at wire + space_between, got %r for wire %r"
+        % (g.rule[37][2], w))
+    # every other tier keeps the minimum, so the change is not a blanket one
+    assert abs(g.rule[36][2] - (solve.wire_w(36)
+                                + ca.TIER_RULE[36][1])) < 1e-9
