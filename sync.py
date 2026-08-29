@@ -137,6 +137,32 @@ FILES = [
     # has lied to these flows before.
     ("routekit/gdsw.py", "routekit/gdsw.py"),
     ("routekit/test_gdsw.py", "routekit/test_gdsw.py"),
+    # DRC-IN-THE-LOOP. The signoff deck's own markers ARE the positions, so
+    # a repair answers THEM rather than re-deriving the violating shapes
+    # from the plan -- which is a second model of a question something else
+    # has already answered, and the two disagree about which shapes merge,
+    # about what a via def draws, and about what a block contributes.
+    #
+    # Shared on the strongest evidence any file here has: `resultsdb` was
+    # written TWICE, independently -- for Calibre 2024.1 in the 65 nm port
+    # and for PVS 23.1 / Pegasus in the XT011 one -- and the two came out
+    # the same algorithm to within a comment, after the XT011 port wrote
+    # down "whether Pegasus emits a Calibre-shaped database" as a question
+    # to ANSWER and ran the 65 nm reader against five real Pegasus files.
+    #
+    # The rule NAMES stay local (`A1M2` / `M2.A.1`) and so does the
+    # flattener; what is shared is the parse, the marker geometry, the
+    # patch, the attribution and the loop protocol. See docs/drc_loop.md
+    # and docs/decisions/0003-drc-in-the-loop.md.
+    ("drcloop/__init__.py", "drcloop/__init__.py"),
+    ("drcloop/resultsdb.py", "drcloop/resultsdb.py"),
+    ("drcloop/markers.py", "drcloop/markers.py"),
+    ("drcloop/triage.py", "drcloop/triage.py"),
+    ("drcloop/loop.py", "drcloop/loop.py"),
+    ("drcloop/test_resultsdb.py", "drcloop/test_resultsdb.py"),
+    ("drcloop/test_markers.py", "drcloop/test_markers.py"),
+    ("drcloop/test_triage.py", "drcloop/test_triage.py"),
+    ("drcloop/test_loop.py", "drcloop/test_loop.py"),
 ]
 
 
