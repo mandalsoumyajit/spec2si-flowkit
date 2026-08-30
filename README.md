@@ -36,8 +36,8 @@ directories *inside* a port (see [ADR-0001](docs/decisions/0001-process-scoped-r
 
 ## What is shared
 
-Thirty-three files, vendored byte-identically into all four ports and
-hash-gated — 132 checks on every `sync.py --check-all`.
+Forty-two files, vendored byte-identically into all four ports and
+hash-gated — 168 checks on every `sync.py --check-all`.
 
 | What | Files | Why it is node-agnostic |
 |---|---|---|
@@ -49,6 +49,7 @@ hash-gated — 132 checks on every `sync.py --check-all`.
 | **The routing core (phase 1)** | `routekit/geom.py`, `routekit/audit.py` + their tests | Rectangles in, findings out. Every process fact arrives through a `rules` object the consumer binds; a missing fact is a refusal, never a default. See [ADR-0002](docs/decisions/0002-routekit-vendored-core.md) and [the plan](docs/routekit_plan.md) |
 | **The card contract (phase 2)** | `routekit/card.py`, `routekit/ruleprobe.py` + their tests | Load/validate/bind a RoutingCard — families by membership lists only, missing-vs-measured-absent kept apart, NDA split supported — and card-driven rule probes self-checked against the audit engine. [Schema](docs/routekit_card_schema.md) |
 | **The housekeeper** | `housekeeping/run_features.py`, `housekeeping/stale_classify.py`, `housekeeping/attic_sweep.sh` | Mtimes and filenames in, `KEEP`/`SWEEP` out. One shared NFS home holds every node's trees, so what may be forgotten is not any one port's question. Features, decision and mover are kept apart so the decision can be *measured* rather than asserted — age alone was a one-feature classifier nobody had validated. [Reference](docs/housekeeping.md) |
+| **The DRC repair loop** | drcloop/ (4 modules + 4 test modules) | The signoff deck's own markers ARE the positions, so a repair answers THEM rather than re-deriving the violating shapes from the plan. Shared on the strongest evidence here: the results-database reader was written TWICE, independently, for Calibre 2024.1 and for PVS/Pegasus, and came out the same algorithm. Rule NAMES and the flattener stay local. See [ADR-0003](docs/decisions/0003-drc-in-the-loop.md) and [the guide](docs/drc_loop.md) |
 
 Everything here is **stdlib-only and never imports the code it documents or
 analyses**. That is load-bearing: it is why the freshness gate and the

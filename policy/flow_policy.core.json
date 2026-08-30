@@ -1,6 +1,6 @@
 {
  "policy": "spec2si-core",
- "version": "1.2.0",
+ "version": "1.3.0",
  "description": "The NODE-AGNOSTIC core of the Spec-to-Silicon flow policy: the rules every process port must carry, stated as portable principles. Consumers (AIML_ASIC 65 nm, ONR_ADFT_ASIC 28 nm, XT011_ASIC) VENDOR this file verbatim and keep their own flow_policy.json beside it, which adds the local enforcement point, the local evidence, and any process-specific rules. A consumer's file must contain every core rule id and declare a status for each; conformance/test_policy_conformance.py checks that and prints the adoption gap. What is shared is the RULE SET and its principle; what stays local is wording detail, enforcement path and evidence -- because the enforcement point is genuinely different per node (Calibre vs PVS/Pegasus, PyCell vs SKILL, one substrate vs per-tub) and pretending otherwise is how a shared file becomes a lie.",
  "contract": {
   "vendored": "policy/flow_policy.core.json is a byte-identical copy; sync.py --check fails a commit when it drifts from upstream",
@@ -103,6 +103,21 @@
    "id": "one-name-one-module",
    "principle": "A bare-name import resolves to exactly one file. A flow that puts many code directories on the import path -- so cells can refer to each other by bare name -- decides a duplicated basename by PATH ORDER, and says nothing when it does: the loser surfaces later as a missing attribute, never as a missing module, so the traceback names a file that is not the one being read. Two hazards, and they need separate gates. Ours-vs-ours: prove a module resolved to the path the flow's own resolver names for that cell. Ours-vs-STDLIB: refuse it when the path is BUILT, because a stdlib name is resolved for the whole process, including code that never opted into this flow -- unless the shadow is declared, in the code, with the reason it is load-bearing. When a name does collide, the fix follows the artifacts, not the convenience: two genuinely different things get distinct names, one thing duplicated is a DELETE, and a name that also identifies a published layout artifact is not free to rename -- check what is published, and what other repositories resolve by that path, first.",
    "since": "1.2.0"
+  },
+  {
+   "id": "marker-is-the-position",
+   "principle": "A physical-verification repair answers the DECK'S OWN MARKERS, and measures its own clearances against the STREAM THE DECK READ. Re-deriving the violating shapes from the plan is a second model of a question the deck has already answered, and the two disagree about which shapes merge, about what a via definition draws, and about what an instantiated block contributes -- so a computed patch lands where nothing was wrong while the real one stays. The plan may ATTRIBUTE a marker (whose net is this) and may never LOCATE one. A marker that cannot be repaired clear of its neighbours is refused BY NAME with the clearance that beat it: a silent skip and a fix are indistinguishable in the next run.",
+   "since": "1.3.0"
+  },
+  {
+   "id": "baseline-delta",
+   "principle": "A verification total is not a result. A change is judged by what it ADDED over a control, and the control is THE SAME OBJECT with the change not applied -- a different cell is not a control. 'Clean' therefore means 'added nothing', never 'returned zero', because a real baseline is rarely zero. When the total cannot be read, SHRINK THE ARTEFACT and never the check: build the smallest cell holding the thing under test, with its coordinates UNCHANGED so a marker in the small run and a marker in the large one are the same number and the two runs diff instead of being argued about. And a derived reply -- a patch set, a repair -- carries the digest of the artefact it replied to, because it is stale the moment that artefact changes.",
+   "since": "1.3.0"
+  },
+  {
+   "id": "render-before-acting",
+   "principle": "Before acting on a geometric claim, DRAW IT. The recurring failure is not a careless measurement but a CORRECT measurement of the WRONG OBJECT -- a marker taken for the metal, a bounding box for a footprint, a declared width for a cross-section, a deck minimum for the placed via's own pad -- and a render defeats all of them at once because it reads no number: it draws what is there. A render costs seconds, it is the artefact a person can check, and it is the only instrument with no opinion about which number matters. A hypothesis about geometry that has survived two measurements and is about to be acted on is drawn first.",
+   "since": "1.3.0"
   }
  ]
 }
