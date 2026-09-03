@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           test -n "$MIRROR_SSH_KEY" || { echo 'Missing ASIC_DOE_SYNC_SSH_KEY repository secret'; exit 1; }
           umask 077
-          printf '%s\n' "$MIRROR_SSH_KEY" > "$RUNNER_TEMP/mirror_key"
+          printf '%s\n' "$MIRROR_SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/mirror_key"
           # GitHub's published Ed25519 host key, verified through api.github.com/meta.
           printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$RUNNER_TEMP/mirror_known_hosts"
 
